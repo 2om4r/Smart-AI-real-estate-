@@ -10,3 +10,5 @@ firebase-admin
 gunicorn
 python-dotenv
 flask-migrate
+flask-wtf
+email-validator
