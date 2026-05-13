@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    body {
+        background-color: #FFF8F0;
+    }
+
+    .container {
+        max-width: 100%;
+        padding: 0;
+    }
+
+    main {
+        margin-top: 0 !important;
+    }
+
+    nav.navbar {
+        display: none;
+    }
+
+    footer {
+        display: none;
+    }
+</style>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+
+<div class="dashboard-container">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-brand">
+            <i class="fas fa-building text-primary"></i> URBN
+            <span class="badge bg-danger ms-2" style="font-size: 0.6rem;">ADMIN</span>
+        </div>
+
+        <a href="{{ url_for('main.dashboard') }}" class="nav-item active">
+            <i class="fas fa-th-large"></i> Dashboard
+        </a>
+
+        <div class="user-profile-mini">
+            <img src="https://ui-avatars.com/api/?name={{ current_user.username }}" class="avatar">
+            <div style="flex-grow: 1;">
+                <div style="font-weight: 600;">{{ current_user.username }}</div>
+                <small>{{ current_user.role }}</small>
+            </div>
+            <a href="{{ url_for('main.logout') }}"><i class="fas fa-sign-out-alt"></i></a>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+
+        <!-- Stats -->
+        <div class="row g-4 mb-4">
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div>Total Users</div>
+                    <h3>{{ users|length }}</h3>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div>Total Properties</div>
+                    <h3>{{ properties|length }}</h3>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="stat-card">
+                    <div>System</div>
+                    <h3 class="text-success">Good</h3>
+                </div>
+            </div>
+        </div>
+
+        <!-- Properties -->
+        <div class="table-container">
+            <h5 class="fw-bold mb-3">Recent Properties</h5>
+
+            <ul class="list-group list-group-flush">
+                {% for property in properties[-5:] %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+
+                    <div>
+                        <div class="fw-bold">{{ property.title }}</div>
+                        <small class="text-muted">{{ property.location }}</small>
+
+                        <!-- 🔥 AI + ML Scores -->
+                        <div style="margin-top:8px;" class="d-flex align-items-center gap-2">
+                            <span class="badge bg-primary" title="Rule-based heuristic score">
+                                AI Score: {{ property.score | default(0) }}
+                            </span>
+                            
+                            {% if (property.ml_score | default(0)) >= 80 %}
+                                <span class="badge bg-success" title="Predicted Value: OMR {{ '{:,.0f}'.format(property.predicted_price | default(0)) }}">
+                                    <i class="fas fa-fire me-1"></i> Great Deal (ML: {{ property.ml_score | default(0) }})
+                                </span>
+                            {% elif (property.ml_score | default(0)) >= 60 %}
+                                <span class="badge bg-secondary" title="Predicted Value: OMR {{ '{:,.0f}'.format(property.predicted_price | default(0)) }}">
+                                    Fair Value (ML: {{ property.ml_score | default(0) }})
+                                </span>
+                            {% else %}
+                                <span class="badge bg-danger" title="Predicted Value: OMR {{ '{:,.0f}'.format(property.predicted_price | default(0)) }}">
+                                    Overvalued (ML: {{ property.ml_score | default(0) }})
+                                </span>
+                            {% endif %}
+
+                            <small class="text-muted ms-2" style="font-size: 0.75rem;">
+                                ML Est: OMR {{ "{:,.0f}".format(property.predicted_price | default(0)) }}
+                            </small>
+                        </div>
+                    </div>
+
+                    <div class="text-end">
+                        <div class="fw-bold text-primary fs-5">
+                            OMR {{ "{:,.0f}".format(property.price) }}
+                        </div>
+                        <div class="text-muted" style="font-size: 0.75rem;">Asking Price</div>
+                    </div>
+
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+    </div>
+</div>
+
+{% endblock %}

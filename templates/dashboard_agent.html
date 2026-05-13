@@ -1,0 +1,764 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  body {
+    background-color: #FFF8F0;
+  }
+
+  .container {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  main {
+    margin-top: 0 !important;
+  }
+
+  /* ── AI Recommendation Card ─────────────────────────────── */
+  .ai-rec-card {
+    background: linear-gradient(135deg, #0d1b2a 0%, #1c3a5e 50%, #1565c0 100%);
+    border-radius: 16px;
+    padding: 28px;
+    color: #e3f2fd;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 8px 32px rgba(21, 101, 192, 0.3);
+  }
+
+  .ai-rec-card::before {
+    content: '🤖';
+    position: absolute;
+    right: -10px;
+    top: -10px;
+    font-size: 8rem;
+    opacity: 0.07;
+    pointer-events: none;
+  }
+
+  .ai-rec-title {
+    font-size: 0.72rem;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: rgba(227, 242, 253, 0.6);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .ai-rec-headline {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 12px;
+    line-height: 1.3;
+  }
+
+  .ai-rec-summary {
+    font-size: 0.82rem;
+    color: rgba(227, 242, 253, 0.8);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+
+  .ai-score-ring {
+    width: 70px;
+    height: 70px;
+    border-radius: 50%;
+    background: conic-gradient(#42a5f5 calc(var(--pct) * 1%), rgba(255, 255, 255, 0.1) 0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #fff;
+    box-shadow: 0 0 20px rgba(66, 165, 245, 0.4);
+  }
+
+  .ai-top3 {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+  }
+
+  .ai-top3-item {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 0.76rem;
+    color: #e3f2fd;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ai-top3-score {
+    background: rgba(66, 165, 245, 0.3);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-weight: 700;
+    font-size: 0.75rem;
+    color: #90caf9;
+  }
+
+  /* ── Type Distribution ───────────────────────────────────── */
+  .type-bar {
+    height: 8px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+  }
+
+  .type-row {
+    margin-bottom: 14px;
+  }
+
+  .type-row .type-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #444;
+  }
+
+  .type-row .type-count {
+    font-size: 0.75rem;
+    color: #888;
+  }
+
+  /* ── Agent brand header ──────────────────────────────────── */
+  .agent-banner {
+    border-radius: 12px;
+    padding: 16px 22px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .agent-banner.omran {
+    background: linear-gradient(135deg, rgba(21, 101, 192, 0.08), rgba(66, 165, 245, 0.14));
+    border: 1px solid rgba(25, 118, 210, 0.25);
+  }
+
+  .agent-banner.surooh {
+    background: linear-gradient(135deg, rgba(106, 0, 128, 0.08), rgba(186, 104, 200, 0.14));
+    border: 1px solid rgba(156, 39, 176, 0.25);
+  }
+
+  .agent-banner.default {
+    background: linear-gradient(135deg, rgba(181, 147, 90, 0.08), rgba(232, 188, 112, 0.14));
+    border: 1px solid rgba(181, 147, 90, 0.25);
+  }
+
+  .agent-banner-icon {
+    font-size: 2.2rem;
+  }
+
+  .agent-banner-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1c0d00;
+  }
+
+  .agent-banner-sub {
+    font-size: 0.78rem;
+    color: #888;
+  }
+</style>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+
+{% set is_omran_agent = current_user.username == 'omran_agent' %}
+{% set is_surooh_agent = current_user.username == 'surooh_agent' %}
+{% set total_props = pf_stats.total %}
+{% set avg_price = pf_stats.avg_price %}
+{% set port_score = pf_stats.portfolio_score %}
+{% set type_dist = pf_stats.type_distribution %}
+
+<div class="dashboard-container">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-brand">
+      {% if is_omran_agent %}
+      <i class="fas fa-building" style="color:#1976d2;"></i> OMRAN
+      {% elif is_surooh_agent %}
+      <i class="fas fa-landmark" style="color:#9c27b0;"></i> Surooh
+      {% else %}
+      <i class="fas fa-building text-primary"></i> URBN
+      {% endif %}
+    </div>
+
+    <a href="{{ url_for('main.dashboard') }}" class="nav-item active">
+      <i class="fas fa-th-large"></i> Dashboard
+    </a>
+    <a href="{{ url_for('main.search') }}" class="nav-item">
+      <i class="fas fa-search"></i> Browse All
+    </a>
+    {% if is_surooh_agent %}
+    <a href="{{ url_for('main.search', surooh_only=1) }}" class="nav-item">
+      <i class="fas fa-star" style="color:#9c27b0;"></i> Surooh Properties
+    </a>
+    {% elif is_omran_agent %}
+    <a href="{{ url_for('main.search', omran_only=1) }}" class="nav-item">
+      <i class="fas fa-building" style="color:#1976d2;"></i> OMRAN Properties
+    </a>
+    {% endif %}
+    <a href="{{ url_for('main.investment_map') }}" class="nav-item">
+      <i class="fas fa-map-marked-alt"></i> Investment Map
+    </a>
+    <a href="{{ url_for('main.new_property') }}" class="nav-item">
+      <i class="fas fa-plus-circle"></i> New Listing
+    </a>
+
+    <div style="margin-top:30px;font-size:0.8rem;color:#999;padding-left:15px;">ACCOUNT</div>
+    <a href="#" class="nav-item tab-link active" data-tab="overview">
+      <i class="fas fa-chart-pie"></i> Overview
+    </a>
+    <a href="#" class="nav-item tab-link" data-tab="messages" style="position:relative;">
+      <i class="fas fa-comment-dots"></i> Messages
+      {% set unread = agent_messages|selectattr('is_read', 'equalto', false)|list %}
+      {% if unread|length > 0 %}
+      <span
+        style="position:absolute;top:8px;right:12px;background:#e53935;color:#fff;border-radius:50%;width:18px;height:18px;font-size:0.65rem;display:flex;align-items:center;justify-content:center;font-weight:700;">{{         unread|length }}</span>
+      {% endif %}
+    </a>
+
+    <div class="user-profile-mini">
+      <img src="https://ui-avatars.com/api/?name={{ current_user.username }}&background=1565c0&color=fff" class="avatar"
+        alt="User">
+      <div style="flex-grow:1;">
+        <div style="font-weight:600;font-size:0.9rem;">{{ current_user.username }}</div>
+        <div style="font-size:0.75rem;color:#666;">{{ current_user.role|capitalize }}</div>
+      </div>
+      <a href="{{ url_for('main.logout') }}" class="text-danger"><i class="fas fa-sign-out-alt"></i></a>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <div class="search-box">
+        <i class="fas fa-search text-muted" style="position:absolute;margin-left:15px;margin-top:12px;"></i>
+        <input type="text" placeholder="Search properties..." style="padding-left:40px;"
+          onkeydown="if(event.key==='Enter')window.location='/search?location='+this.value">
+      </div>
+      <div class="d-flex align-items-center gap-3">
+        {% if is_omran_agent %}
+        <span class="badge" style="background:#1976d2;padding:8px 14px;font-size:0.8rem;">🏢 OMRAN Agent</span>
+        {% elif is_surooh_agent %}
+        <span class="badge" style="background:#9c27b0;padding:8px 14px;font-size:0.8rem;">🏛️ Surooh Agent</span>
+        {% else %}
+        <span class="badge" style="background:#b5935a;padding:8px 14px;font-size:0.8rem;">Agent</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="tab-section active" id="tab-overview">
+    <!-- Agent Brand Banner -->
+    {% if is_omran_agent %}
+    <div class="agent-banner omran mx-3 mt-3">
+      <div class="agent-banner-icon">🏢</div>
+      <div>
+        <div class="agent-banner-title">OMRAN Group Dashboard</div>
+        <div class="agent-banner-sub">Managing {{ total_props }} premium properties across Oman</div>
+      </div>
+    </div>
+    {% elif is_surooh_agent %}
+    <div class="agent-banner surooh mx-3 mt-3">
+      <div class="agent-banner-icon">🏛️</div>
+      <div>
+        <div class="agent-banner-title">Surooh Government Projects Dashboard</div>
+        <div class="agent-banner-sub">Managing {{ total_props }} official housing units across Oman</div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Real Stats Row ──────────────────────────────────── -->
+    <div class="row g-4 mb-4 {% if is_omran_agent or is_surooh_agent %}mt-2{% else %}mt-3{% endif %} px-3">
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-title">AI Portfolio Score</div>
+          <div class="stat-value">{{ port_score }} <span style="font-size:0.9rem;color:#ccc;">/ 100</span></div>
+          <div class="stat-trend trend-up"><i class="fas fa-robot"></i> AI Computed</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-title">Total Properties</div>
+          <div class="stat-value">{{ "{:,}".format(total_props) }}</div>
+          <div class="stat-trend trend-up"><i class="fas fa-home"></i> Active listings</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-title">Average Price</div>
+          <div class="stat-value" style="font-size:1.4rem;">OMR {{ "{:,.0f}".format(avg_price) }}</div>
+          <div class="stat-trend"><i class="fas fa-tag"></i> Market avg</div>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <div class="stat-card">
+          <div class="stat-title">Average ROI</div>
+          <div class="stat-value" style="font-size:1.4rem;">{{ pf_stats.avg_roi }}%</div>
+          <div class="stat-trend trend-up"><i class="fas fa-chart-line"></i> Est. Yield</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── AI Recommendation + Type Distribution ──────────── -->
+    <div class="row g-4 mb-4 px-3">
+
+      <!-- AI Recommendation Card -->
+      <div class="col-md-8">
+        <div class="ai-rec-card">
+          <div class="ai-rec-title">🤖 AI Investment Recommendation</div>
+
+          {% if ai_rec and pf_stats.total > 0 %}
+          <div class="d-flex align-items-start gap-4">
+            {% set ring_style = 'style="--pct: %s;"'|format(ai_rec.score) %}
+            <div class="ai-score-ring" {{ ring_style | safe }}>
+              {{ ai_rec.score }}
+            </div>
+            <div class="flex-grow-1">
+              <div class="ai-rec-headline">
+                Best opportunity: {{ ai_rec.best_project }}
+                {% if ai_rec.type %}<small style="font-weight:400;opacity:.8;">({{ ai_rec.type }})</small>{% endif %}
+                <span class="badge" style="background:#43a047;font-size:0.65rem;margin-left:8px;">{{                   ai_rec.predicted_growth }} Growth</span>
+                <span class="badge" style="background:#fb8c00;font-size:0.65rem;margin-left:4px;">Risk: {{                   ai_rec.risk_level|capitalize }}</span>
+              </div>
+              <div class="ai-rec-summary"><strong>AI Reasoning:</strong> {{ ai_rec.reason|capitalize }}</div>
+              <div class="ai-rec-summary" style="font-size:.78rem;opacity:.7;">
+                Portfolio avg price: OMR {{ "{:,.0f}".format(ai_rec.avg_price) }}
+                &nbsp;·&nbsp; {{ pf_stats.total }} properties analysed
+              </div>
+            </div>
+          </div>
+
+          {% if ai_rec.top_3 or ai_rec.worst_2 %}
+          <div class="row mt-3">
+            <div class="col-md-6">
+              <div class="ai-rec-title">Top Investment Picks</div>
+              <div class="ai-top3">
+                {% for pick in ai_rec.top_3 %}
+                <div class="ai-top3-item">
+                  <span>📍 {{ pick.title or pick.location }}</span>
+                  <span class="ai-top3-score text-success">{{ pick.score }}</span>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="ai-rec-title" style="color:rgba(239,154,154,0.8);">Lowest Scoring Properties</div>
+              <div class="ai-top3">
+                {% for pick in ai_rec.worst_2 %}
+                <div class="ai-top3-item" style="border-color:rgba(229,57,53,0.3);background:rgba(229,57,53,0.1);">
+                  <span>📍 {{ pick.title or pick.location }}</span>
+                  <span class="ai-top3-score" style="color:#ef9a9a;background:rgba(229,57,53,0.3);">{{ pick.score                     }}</span>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+          {% endif %}
+          {% else %}
+          <div class="ai-rec-headline">No portfolio data yet</div>
+          <div class="ai-rec-summary">Add properties to get AI-powered investment recommendations.</div>
+          {% endif %}
+
+          <div style="margin-top:18px;">
+            <a href="{{ url_for('main.investment_map') }}" class="btn btn-sm"
+              style="background:rgba(255,255,255,0.15);color:#e3f2fd;border:1px solid rgba(255,255,255,0.3);border-radius:20px;">
+              <i class="fas fa-map-marked-alt me-1"></i>View Investment Map
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Type Distribution Panel -->
+      <div class="col-md-4">
+        <div class="chart-container h-100">
+          <div class="fw-bold mb-3" style="font-size:0.95rem;">Property Type Distribution</div>
+
+          {% set colors =
+          {'Villa':'#b5935a','Apartment':'#1976d2','Townhouse':'#9c27b0','Land':'#43a047','Office':'#e53935','Commercial':'#fb8c00'}
+          %}
+          {% set max_count = type_dist.values()|list|max if type_dist else 1 %}
+
+          {% for ptype, count in type_dist|dictsort(by='value', reverse=true) %}
+          <div class="type-row">
+            <div class="d-flex justify-content-between">
+              <span class="type-label">{{ ptype }}</span>
+              <span class="type-count">{{ count }} ({{ ((count / total_props) * 100)|round(1) }}%)</span>
+            </div>
+            {% set bar_bg = colors.get(ptype, '#b5935a') %}
+            {% set bar_w = ((count/max_count)*100)|int %}
+            {% set bar_style = 'style="background-color: ' ~ bar_bg ~ '; width: ' ~ bar_w ~ '%; opacity: 0.8;"' %}
+            <div class="type-bar" {{ bar_style | safe }}></div>
+          </div>
+          {% else %}
+          <p class="text-muted small">No data available.</p>
+          {% endfor %}
+
+          <canvas id="typeChart" height="180" class="mt-3"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Listings Table + Price Chart ───────────────────── -->
+    <div class="row g-4 px-3 mb-4">
+      <div class="col-md-8">
+        <div class="table-container">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold">
+              My Listings
+              <span class="badge bg-secondary ms-2" style="font-size:.75rem;">{{ total_props }}</span>
+            </h5>
+            <a href="{{ url_for('main.new_property') }}" class="btn btn-dark btn-sm">
+              <i class="fas fa-plus"></i> New
+            </a>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table align-middle">
+              <thead class="table-light">
+                <tr>
+                  <th width="50"></th>
+                  <th>Price / Title</th>
+                  <th>Location</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for property in properties[:20] %}
+                <tr>
+                  <td>
+                    {% set main_image = property.images|selectattr('is_main', 'equalto', true)|first %}
+                    {% if main_image %}
+                    <img src="{{ url_for('static', filename='uploads/properties/' + main_image.image_filename) }}" class="rounded" width="48"
+                      height="48" style="object-fit:cover;">
+                    {% else %}
+                    <div class="rounded d-flex align-items-center justify-content-center"
+                      style="width:48px;height:48px;background:linear-gradient(135deg,#f5e6d0,#e8cfa8);">
+                      <i class="fas fa-home" style="color:#b5935a;font-size:1.1rem;"></i>
+                    </div>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="fw-bold">OMR {{ "{:,.0f}".format(property.price) }}</div>
+                    <div class="small text-muted"
+                      style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                      {{ property.title }}
+                    </div>
+                  </td>
+                  <td>
+                    <div class="small"><i class="fas fa-map-marker-alt text-muted me-1"></i>{{ property.location }}
+                    </div>
+                  </td>
+                  <td>
+                    {% if property.is_surooh %}
+                    <span class="badge" style="background:linear-gradient(135deg,#6a0080,#9c27b0);font-size:.65rem;">🏛️
+                      Surooh</span>
+                    {% elif property.is_omran %}
+                    <span class="badge" style="background:linear-gradient(135deg,#1565c0,#1976d2);font-size:.65rem;">🏢
+                      OMRAN</span>
+                    {% else %}
+                    <span class="badge bg-secondary" style="font-size:.65rem;">{{ property.type }}</span>
+                    {% endif %}
+                  </td>
+                  <td>
+                    <div class="small text-success"><i class="fas fa-circle" style="font-size:8px;"></i> Active</div>
+                  </td>
+                  <td class="text-end">
+                    <a href="{{ url_for('main.property_detail', property_id=property.id) }}"
+                      class="btn btn-sm btn-outline-secondary">View</a>
+                    <form action="{{ url_for('main.delete_property', property_id=property.id) }}" method="POST" class="d-inline" onsubmit="return confirm('Are you sure you want to delete this property?');">
+                      <button type="submit" class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+                    </form>
+                  </td>
+                </tr>
+                {% else %}
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">No listings found.</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% if total_props > 20 %}
+            <div class="text-center mt-2">
+              {% if is_surooh_agent %}
+              <a href="{{ url_for('main.search', surooh_only=1) }}" class="btn btn-sm btn-outline-secondary">View all {{ total_props }} listings →</a>
+              {% elif is_omran_agent %}
+              <a href="{{ url_for('main.search', omran_only=1) }}" class="btn btn-sm btn-outline-secondary">View all {{ total_props }} listings →</a>
+              {% else %}
+              <a href="{{ url_for('main.search') }}" class="btn btn-sm btn-outline-secondary">View all {{ total_props }} listings →</a>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Price Distribution Chart -->
+      <div class="col-md-4">
+        <div class="chart-container">
+          <div class="fw-bold mb-1" style="font-size:0.95rem;">Portfolio Value (OMR)</div>
+          <div class="text-muted small mb-3">Total: OMR {{ "{:,.0f}".format(properties | sum(attribute='price')) }}
+          </div>
+          <canvas id="priceChart" height="260"></canvas>
+        </div>
+      </div>
+    </div>
+  </div> <!-- /tab-overview -->
+
+  <!-- ── Agent Inbox (Threaded) ────────────────────────── -->
+  <div class="tab-section" id="tab-messages" style="display:none;">
+    <div class="row g-4 px-3 mb-4">
+    <div class="col-12">
+      <div class="table-container" id="agent-messages">
+        <h5 class="fw-bold mb-3"><i class="fas fa-envelope me-2" style="color:#C68B59;"></i>Customer Messages
+          {% set total_unread = threads|sum(attribute='unread') %}
+          {% if total_unread > 0 %}<span class="badge bg-danger ms-2">{{ total_unread }}</span>{% endif %}
+        </h5>
+
+        {% if threads %}
+        <div style="display:flex;gap:0;border:1px solid #E8D5C0;border-radius:14px;overflow:hidden;height:420px;background:#FFFBF5;">
+            <!-- Conversation List (Left) -->
+            <div style="width:240px;border-right:1px solid #E8D5C0;overflow-y:auto;flex-shrink:0;background:#FFF8F0;">
+                {% for thread in threads %}
+                <div class="agent-thread-item {% if loop.first %}active{% endif %}" data-thread-id="{{ thread.user.id }}"
+                     onclick="openAgentThread('{{ thread.user.id }}', this)"
+                     style="padding:14px 16px;cursor:pointer;border-bottom:1px solid #E8D5C0;transition:background 0.2s;{% if loop.first %}background:#FFFBF5;border-left:3px solid #1976d2;{% endif %}">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#43a047,#66bb6a);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:0.85rem;flex-shrink:0;">
+                            {{ thread.user.username[0]|upper }}
+                        </div>
+                        <div style="flex:1;min-width:0;">
+                            <div style="font-weight:700;font-size:0.85rem;color:#3E2723;">{{ thread.user.username }}</div>
+                            <div style="font-size:0.72rem;color:#8D6E63;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                {{ thread.last_msg.content[:35] }}{% if thread.last_msg.content|length > 35 %}...{% endif %}
+                            </div>
+                        </div>
+                        {% if thread.unread > 0 %}
+                        <span style="background:#e53935;color:#fff;border-radius:50%;width:20px;height:20px;font-size:0.65rem;display:flex;align-items:center;justify-content:center;font-weight:700;">{{ thread.unread }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- Chat Panel (Right) -->
+            <div style="flex:1;display:flex;flex-direction:column;">
+                {% for thread in threads %}
+                <div class="agent-chat-panel" id="agent-chat-{{ thread.user.id }}" style="flex:1;display:{% if loop.first %}flex{% else %}none{% endif %};flex-direction:column;">
+                    <!-- Chat Header -->
+                    <div style="padding:12px 20px;border-bottom:1px solid #E8D5C0;background:#FFF8F0;">
+                        <div style="font-weight:700;color:#3E2723;font-size:0.95rem;">
+                            <i class="fas fa-user me-2" style="color:#43a047;"></i>{{ thread.user.username }}
+                            <span style="font-size:0.72rem;color:#8D6E63;margin-left:8px;">Customer</span>
+                        </div>
+                    </div>
+                    <!-- Messages -->
+                    <div style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;" id="agent-msgs-{{ thread.user.id }}">
+                        {% for msg in thread.messages %}
+                        <div style="display:flex;{% if msg.sender_id == current_user.id %}justify-content:flex-end{% else %}justify-content:flex-start{% endif %};">
+                            <div style="max-width:75%;padding:10px 14px;border-radius:{% if msg.sender_id == current_user.id %}14px 14px 4px 14px{% else %}14px 14px 14px 4px{% endif %};
+                                {% if msg.sender_id == current_user.id %}background:linear-gradient(135deg,#1565c0,#42a5f5);color:#fff;{% else %}background:#F5EDE4;color:#3E2723;{% endif %}
+                                font-size:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                                <div>{{ msg.content }}</div>
+                                <div style="font-size:0.65rem;{% if msg.sender_id == current_user.id %}color:rgba(255,255,255,0.7){% else %}color:#8D6E63{% endif %};margin-top:4px;text-align:right;">
+                                    {{ msg.timestamp.strftime('%b %d, %H:%M') }}
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <!-- Reply Input -->
+                    <div style="padding:12px 16px;border-top:1px solid #E8D5C0;background:#FFF8F0;display:flex;gap:8px;">
+                        <input type="text" class="form-control" data-receiver="{{ thread.user.id }}"
+                               placeholder="Type a reply..."
+                               style="border:1.5px solid #E8D5C0;border-radius:20px;padding:8px 16px;font-size:0.85rem;background:#FFFDF8;"
+                               onkeydown="if(event.key==='Enter')sendAgentReply('{{ thread.user.id }}', this)">
+                        <button onclick="sendAgentReply('{{ thread.user.id }}', this.previousElementSibling)"
+                                style="background:linear-gradient(135deg,#1565c0,#42a5f5);color:#fff;border:none;border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+                            <i class="fas fa-paper-plane" style="font-size:0.85rem;"></i>
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% else %}
+        <div class="text-center py-4 text-muted">
+          <i class="fas fa-inbox fa-2x mb-2"></i>
+          <p>No messages yet</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  </div> <!-- /tab-messages -->
+
+</div><!-- /main-content -->
+</div><!-- /dashboard-container -->
+
+<script>
+  // Tab switching logic
+  document.querySelectorAll('.tab-link').forEach(link => {
+      link.addEventListener('click', function(e) {
+          e.preventDefault();
+          const targetTab = this.getAttribute('data-tab');
+          
+          document.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
+          this.classList.add('active');
+          
+          document.querySelectorAll('.tab-section').forEach(sec => sec.style.display = 'none');
+          document.getElementById('tab-' + targetTab).style.display = 'block';
+      });
+  });
+
+  // ============ Threaded Messages ============
+  function openAgentThread(userId, el) {
+      document.querySelectorAll('.agent-chat-panel').forEach(p => p.style.display = 'none');
+      const panel = document.getElementById('agent-chat-' + userId);
+      if (panel) {
+          panel.style.display = 'flex';
+          const msgsDiv = document.getElementById('agent-msgs-' + userId);
+          if (msgsDiv) msgsDiv.scrollTop = msgsDiv.scrollHeight;
+      }
+      document.querySelectorAll('.agent-thread-item').forEach(t => {
+          t.style.background = '';
+          t.style.borderLeft = '';
+          t.classList.remove('active');
+      });
+      el.style.background = '#FFFBF5';
+      el.style.borderLeft = '3px solid #1976d2';
+      el.classList.add('active');
+  }
+
+  function sendAgentReply(receiverId, inputEl) {
+      const message = inputEl.value.trim();
+      if (!message) return;
+      inputEl.disabled = true;
+
+      fetch('/api/reply_message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ receiver_id: receiverId, content: message })
+      })
+      .then(r => r.json())
+      .then(data => {
+          inputEl.disabled = false;
+          if (data.status === 'sent') {
+              inputEl.value = '';
+              const msgsDiv = document.getElementById('agent-msgs-' + receiverId);
+              const now = new Date();
+              const timeStr = now.toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
+              const bubble = document.createElement('div');
+              bubble.style.cssText = 'display:flex;justify-content:flex-end;';
+              bubble.innerHTML = `
+                  <div style="max-width:75%;padding:10px 14px;border-radius:14px 14px 4px 14px;background:linear-gradient(135deg,#1565c0,#42a5f5);color:#fff;font-size:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                      <div>${message}</div>
+                      <div style="font-size:0.65rem;color:rgba(255,255,255,0.7);margin-top:4px;text-align:right;">${timeStr}</div>
+                  </div>`;
+              msgsDiv.appendChild(bubble);
+              msgsDiv.scrollTop = msgsDiv.scrollHeight;
+          }
+      })
+      .catch(() => { inputEl.disabled = false; });
+  }
+
+  // Auto-scroll all agent chat panels to bottom on load
+  document.querySelectorAll('[id^="agent-msgs-"]').forEach(div => {
+      div.scrollTop = div.scrollHeight;
+  });
+
+  // Tab switching logic
+  document.querySelectorAll('.tab-link').forEach(link => {
+      link.addEventListener('click', function(e) {
+          e.preventDefault();
+          const targetTab = this.getAttribute('data-tab');
+          
+          // Update active links
+          document.querySelectorAll('.tab-link').forEach(l => l.classList.remove('active'));
+          this.classList.add('active');
+          
+          // Show correct tab
+          document.querySelectorAll('.tab-section').forEach(sec => sec.style.display = 'none');
+          document.getElementById('tab-' + targetTab).style.display = 'block';
+      });
+  });
+</script>
+
+<script id="type-data" type="application/json">
+  {{ type_dist | tojson | safe }}
+</script>
+<script id="prices-data" type="application/json">
+  {{ properties | map(attribute='price') | list | tojson | safe }}
+</script>
+
+<script>
+  // ── Type Distribution Doughnut ────────────────────────────────────────────
+  const typeData = JSON.parse(document.getElementById('type-data').textContent);
+  const typeLabels = Object.keys(typeData);
+  const typeCounts = Object.values(typeData);
+  const typeColors = {
+    'Villa': '#b5935a', 'Apartment': '#1976d2',
+    'Townhouse': '#9c27b0', 'Land': '#43a047',
+    'Office': '#e53935', 'Commercial': '#fb8c00'
+  };
+  const typeColorArr = typeLabels.map(t => typeColors[t] || '#aaa');
+
+  new Chart(document.getElementById('typeChart'), {
+    type: 'doughnut',
+    data: {
+      labels: typeLabels,
+      datasets: [{ data: typeCounts, backgroundColor: typeColorArr, borderWidth: 2, borderColor: '#fff' }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10 } }
+      },
+      cutout: '65%'
+    }
+  });
+
+  // ── Price Distribution Bar Chart ──────────────────────────────────────────
+  const priceRanges = ['<50k', '50-100k', '100-150k', '150-200k', '200k+'];
+  const prices = JSON.parse(document.getElementById('prices-data').textContent);
+  const buckets = [0, 0, 0, 0, 0];
+  prices.forEach(p => {
+    if (p < 50000) buckets[0]++;
+    else if (p < 100000) buckets[1]++;
+    else if (p < 150000) buckets[2]++;
+    else if (p < 200000) buckets[3]++;
+    else buckets[4]++;
+  });
+
+  new Chart(document.getElementById('priceChart'), {
+    type: 'bar',
+    data: {
+      labels: priceRanges,
+      datasets: [{
+        label: 'Properties',
+        data: buckets,
+        backgroundColor: ['#43a047', '#1976d2', '#fb8c00', '#9c27b0', '#e53935'],
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { borderDash: [4, 4] } },
+        x: { grid: { display: false } }
+      }
+    }
+  });
+</script>
+
+{% endblock %}

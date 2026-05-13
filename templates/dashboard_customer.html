@@ -1,0 +1,910 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    body {
+        background-color: #FFF8F0;
+    }
+
+    .container {
+        max-width: 100%;
+        padding: 0;
+    }
+
+    main {
+        margin-top: 0 !important;
+    }
+
+    /* Section headers */
+    .section-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+        padding-bottom: 12px;
+        border-bottom: 2px solid #E8D5C0;
+    }
+
+    .section-header h5 {
+        margin: 0;
+        font-weight: 700;
+        color: #3E2723;
+    }
+
+    .section-header i {
+        color: #C68B59;
+        font-size: 1.2rem;
+    }
+
+    /* Property cards */
+    .prop-card {
+        background: #FFFBF5;
+        border: 1px solid #E8D5C0;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 3px 12px rgba(62, 39, 35, 0.06);
+        transition: transform 0.25s, box-shadow 0.25s;
+    }
+
+    .prop-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(62, 39, 35, 0.12);
+    }
+
+    .prop-card-icon {
+        height: 140px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #f5e6d0, #e8cfa8);
+    }
+
+    .prop-card-icon i {
+        font-size: 2.5rem;
+        color: #C68B59;
+    }
+
+    .prop-card-body {
+        padding: 16px;
+    }
+
+    .prop-card-body h6 {
+        font-weight: 700;
+        color: #3E2723;
+        margin-bottom: 4px;
+        font-size: 0.92rem;
+    }
+
+    .prop-card-location {
+        color: #8D6E63;
+        font-size: 0.8rem;
+    }
+
+    .prop-card-price {
+        color: #B8860B;
+        font-weight: 700;
+        font-size: 1.05rem;
+        margin-top: 6px;
+    }
+
+    .prop-card-stats {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+    }
+
+    .prop-stat {
+        background: #FFF3E0;
+        padding: 4px 10px;
+        border-radius: 8px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: #6D4C41;
+    }
+
+    .prop-stat.roi {
+        background: #E8F5E9;
+        color: #2E7D32;
+    }
+
+    .prop-card-actions {
+        display: flex;
+        gap: 6px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #E8D5C0;
+    }
+
+    .prop-card-actions button,
+    .prop-card-actions a {
+        flex: 1;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border-radius: 8px;
+        padding: 7px 0;
+        text-align: center;
+        text-decoration: none;
+        border: none;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-fav {
+        background: #FFF3E0;
+        color: #E65100;
+    }
+
+    .btn-fav:hover {
+        background: #FFE0B2;
+    }
+
+    .btn-fav.active {
+        background: #E65100;
+        color: #fff;
+    }
+
+    .btn-contact {
+        background: #E8F5E9;
+        color: #2E7D32;
+    }
+
+    .btn-contact:hover {
+        background: #C8E6C9;
+    }
+
+    .btn-map {
+        background: #E3F2FD;
+        color: #1565C0;
+    }
+
+    .btn-map:hover {
+        background: #BBDEFB;
+    }
+
+    /* Messages */
+    .msg-item {
+        display: flex;
+        gap: 12px;
+        padding: 14px;
+        background: #FFFBF5;
+        border: 1px solid #E8D5C0;
+        border-radius: 12px;
+        margin-bottom: 10px;
+        transition: background 0.2s;
+    }
+
+    .msg-item:hover {
+        background: #FFF3E0;
+    }
+
+    .msg-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #C68B59, #D4A574);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-weight: 700;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+    }
+
+    .msg-content {
+        flex: 1;
+    }
+
+    .msg-content .msg-from {
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: #3E2723;
+    }
+
+    .msg-content .msg-text {
+        font-size: 0.82rem;
+        color: #5D4037;
+        margin-top: 2px;
+    }
+
+    .msg-content .msg-time {
+        font-size: 0.7rem;
+        color: #8D6E63;
+        margin-top: 4px;
+    }
+
+    /* Sidebar active tab */
+    .nav-item[data-tab].active {
+        background: linear-gradient(135deg, rgba(212, 165, 116, 0.25), rgba(196, 139, 89, 0.18));
+        color: #B8860B;
+        font-weight: 700;
+    }
+
+    /* Tab content */
+    .tab-section {
+        display: none;
+    }
+
+    .tab-section.active {
+        display: block;
+    }
+
+    /* Map container */
+    #dashboard-map {
+        height: 320px;
+        border-radius: 14px;
+        border: 1px solid #E8D5C0;
+    }
+
+    /* Contact modal */
+    .contact-modal-backdrop {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .contact-modal-backdrop.show {
+        display: flex;
+    }
+
+    .contact-modal {
+        background: #FFFBF5;
+        border-radius: 16px;
+        padding: 28px;
+        width: 420px;
+        max-width: 90%;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+    }
+
+    .contact-modal h5 {
+        font-weight: 700;
+        color: #3E2723;
+        margin-bottom: 16px;
+    }
+
+    .contact-modal textarea {
+        width: 100%;
+        border: 1.5px solid #E8D5C0;
+        border-radius: 10px;
+        padding: 12px;
+        font-size: 0.9rem;
+        resize: vertical;
+        min-height: 100px;
+        background: #FFFDF8;
+    }
+
+    .contact-modal textarea:focus {
+        border-color: #C68B59;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(198, 139, 89, 0.2);
+    }
+</style>
+
+<link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<div class="dashboard-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-brand">
+            <i class="fas fa-building text-primary"></i> URBN
+        </div>
+
+        <a href="#" class="nav-item active" data-tab="overview">
+            <i class="fas fa-th-large"></i> Overview
+        </a>
+        <a href="#" class="nav-item" data-tab="favorites">
+            <i class="fas fa-heart"></i> Favorites
+            <span class="badge bg-danger ms-auto" style="font-size:0.65rem;">{{ favorites|length }}</span>
+        </a>
+        <a href="#" class="nav-item" data-tab="messages">
+            <i class="fas fa-comment-dots"></i> Messages
+            <span class="badge bg-warning text-dark ms-auto" style="font-size:0.65rem;">{{ messages|length }}</span>
+        </a>
+        <a href="#" class="nav-item" data-tab="recommendations">
+            <i class="fas fa-chart-line"></i> AI Invest
+        </a>
+        <a href="#" class="nav-item" data-tab="history">
+            <i class="fas fa-history"></i> Recently Viewed
+        </a>
+        <a href="{{ url_for('main.home') }}" class="nav-item">
+            <i class="fas fa-search"></i> Browse
+        </a>
+
+        <div class="user-profile-mini">
+            <img src="https://ui-avatars.com/api/?name={{ current_user.username }}&background=C68B59&color=fff"
+                class="avatar" alt="User">
+            <div style="flex-grow: 1;">
+                <div style="font-weight: 600; font-size: 0.9rem;">{{ current_user.username }}</div>
+                <div style="font-size: 0.75rem; color: #666;">{{ current_user.role|capitalize }}</div>
+            </div>
+            <a href="{{ url_for('main.logout') }}" class="text-danger"><i class="fas fa-sign-out-alt"></i></a>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="top-bar">
+            <h4 class="fw-bold">Welcome back, {{ current_user.username }} 👋</h4>
+            <div class="d-flex align-items-center gap-3">
+                <a href="{{ url_for('main.investment_map') }}" class="btn btn-outline-primary btn-sm"><i
+                        class="fas fa-map"></i> Investment Map</a>
+                <a href="{{ url_for('main.home') }}" class="btn btn-outline-primary btn-sm"><i class="fas fa-home"></i>
+                    Home</a>
+            </div>
+        </div>
+
+        <!-- ============ TAB: Overview ============ -->
+        <div class="tab-section active" id="tab-overview">
+            <!-- Stats Row -->
+            <div class="row g-4 mb-4">
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-title"><i class="fas fa-heart text-danger me-1"></i> Saved</div>
+                        <div class="stat-value">{{ favorites|length }}</div>
+                        <div class="stat-trend trend-up"><i class="fas fa-bookmark"></i> Favorites</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-title"><i class="fas fa-comments text-warning me-1"></i> Messages</div>
+                        <div class="stat-value">{{ messages|length }}</div>
+                        <div class="stat-trend trend-up"><i class="fas fa-envelope"></i> Conversations</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-title"><i class="fas fa-star text-success me-1"></i> AI Picks</div>
+                        <div class="stat-value">{{ recommended|length }}</div>
+                        <div class="stat-trend trend-up"><i class="fas fa-robot"></i> Smart picks</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="stat-title"><i class="fas fa-map-marker-alt text-primary me-1"></i> Areas</div>
+                        <div class="stat-value">{{ recommended|map(attribute='location')|unique|list|length }}</div>
+                        <div class="stat-trend trend-up"><i class="fas fa-globe"></i> Locations</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Favorites Preview -->
+            <div class="section-header">
+                <i class="fas fa-heart"></i>
+                <h5>Recent Favorites</h5>
+            </div>
+            <div class="row g-3 mb-4">
+                {% for fav in favorites[:3] %}
+                <div class="col-md-4">
+                    <div class="prop-card">
+                        {% set main_image = fav.property.images|selectattr('is_main', 'equalto', true)|first %}
+                        {% if main_image %}
+                        <div class="prop-card-icon" style="background: url('{{ url_for('static', filename='uploads/properties/' + main_image.image_filename) }}') center/cover no-repeat;">
+                        </div>
+                        {% else %}
+                        <div class="prop-card-icon">
+                            {% if fav.property.type == 'Villa' %}<i class="fas fa-home"></i>
+                            {% elif fav.property.type == 'Apartment' %}<i class="fas fa-building"></i>
+                            {% elif fav.property.type == 'Land' %}<i class="fas fa-mountain"></i>
+                            {% else %}<i class="fas fa-key"></i>{% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="prop-card-body">
+                            
+                            {% if fav.property.is_surooh %}
+                            <span class="badge mb-2" style="background:linear-gradient(135deg,#6a0080,#9c27b0);font-size:0.6rem;padding:4px 8px;">🏛️ Surooh Project</span>
+                            {% elif fav.property.is_omran %}
+                            <span class="badge mb-2" style="background:linear-gradient(135deg,#1565c0,#1976d2);font-size:0.6rem;padding:4px 8px;">🏢 OMRAN Project</span>
+                            {% endif %}
+<h6>{{ fav.property.title }}</h6>
+                            <div class="prop-card-location"><i class="fas fa-map-marker-alt"></i> {{                                 fav.property.location }}</div>
+                            <div class="prop-card-price">OMR {{ "{:,.0f}".format(fav.property.price) }}</div>
+                            <div class="prop-card-actions">
+                                <button class="btn-fav active" onclick="toggleFav('{{ fav.property.id }}', this)"><i
+                                        class="fas fa-heart"></i> Saved</button>
+                                <a href="{{ url_for('main.property_detail', property_id=fav.property.id) }}"
+                                    class="btn-map"><i class="fas fa-eye"></i> View</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="col-12 text-center py-4">
+                    <div class="text-muted"><i class="far fa-heart fa-2x mb-2"></i></div>
+                    <p class="text-muted">No favorites yet. <a href="{{ url_for('main.home') }}">Browse properties</a>
+                    </p>
+                </div>
+                {% endfor %}
+            </div>
+
+            <!-- AI Recommendations Preview -->
+            <div class="section-header">
+                <i class="fas fa-chart-line"></i>
+                <h5>AI Investment Picks</h5>
+            </div>
+            <div class="row g-3">
+                {% for p in recommended[:3] %}
+                <div class="col-md-4">
+                    <div class="prop-card">
+                        {% set main_image = p.images|selectattr('is_main', 'equalto', true)|first %}
+                        {% if main_image %}
+                        <div class="prop-card-icon" style="background: url('{{ url_for('static', filename='uploads/properties/' + main_image.image_filename) }}') center/cover no-repeat;">
+                        </div>
+                        {% else %}
+                        <div class="prop-card-icon">
+                            {% if p.type == 'Villa' %}<i class="fas fa-home"></i>
+                            {% elif p.type == 'Apartment' %}<i class="fas fa-building"></i>
+                            {% elif p.type == 'Land' %}<i class="fas fa-mountain"></i>
+                            {% else %}<i class="fas fa-key"></i>{% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="prop-card-body">
+                            {% if p.is_surooh %}
+                            <span class="badge mb-1"
+                                style="background:linear-gradient(135deg,#6a0080,#9c27b0);font-size:0.65rem;">🏛️
+                                Surooh</span>
+                            {% elif p.is_omran %}
+                            <span class="badge mb-1"
+                                style="background:linear-gradient(135deg,#1565c0,#1976d2);font-size:0.65rem;">🏢
+                                OMRAN</span>
+                            {% endif %}
+                            <h6>{{ p.title[:45] }}{% if p.title|length > 45 %}...{% endif %}</h6>
+                            <div class="prop-card-location"><i class="fas fa-map-marker-alt"></i> {{ p.location }}</div>
+                            <div class="prop-card-price">OMR {{ "{:,.0f}".format(p.price) }}</div>
+                            <div class="prop-card-stats">
+                                <span class="prop-stat roi">ROI {{ p.roi }}%</span>
+                                <span class="prop-stat">OMR {{ "{:,.0f}".format(p.yearly_income) }}/yr</span>
+                            </div>
+                            <div class="prop-card-actions">
+                                <button class="btn-fav" onclick="toggleFav('{{ p.id }}', this)"><i
+                                        class="fas fa-heart"></i></button>
+                                <button class="btn-contact" onclick="openContact('{{ p.agent_id }}', '{{ p.id }}')"><i
+                                        class="fas fa-comment"></i></button>
+                                <a href="{{ url_for('main.property_detail', property_id=p.id) }}" class="btn-map"><i
+                                        class="fas fa-eye"></i> View</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- ============ TAB: Favorites ============ -->
+        <div class="tab-section" id="tab-favorites">
+            <div class="section-header">
+                <i class="fas fa-heart"></i>
+                <h5>My Favorite Properties</h5>
+            </div>
+            <div class="row g-3">
+                {% for fav in favorites %}
+                <div class="col-md-4" id="fav-card-{{ fav.property.id }}">
+                    <div class="prop-card">
+                        {% set main_image = fav.property.images|selectattr('is_main', 'equalto', true)|first %}
+                        {% if main_image %}
+                        <div class="prop-card-icon" style="background: url('{{ url_for('static', filename='uploads/properties/' + main_image.image_filename) }}') center/cover no-repeat;">
+                        </div>
+                        {% else %}
+                        <div class="prop-card-icon">
+                            {% if fav.property.type == 'Villa' %}<i class="fas fa-home"></i>
+                            {% elif fav.property.type == 'Apartment' %}<i class="fas fa-building"></i>
+                            {% elif fav.property.type == 'Land' %}<i class="fas fa-mountain"></i>
+                            {% else %}<i class="fas fa-key"></i>{% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="prop-card-body">
+                            
+                            {% if fav.property.is_surooh %}
+                            <span class="badge mb-2" style="background:linear-gradient(135deg,#6a0080,#9c27b0);font-size:0.6rem;padding:4px 8px;">🏛️ Surooh Project</span>
+                            {% elif fav.property.is_omran %}
+                            <span class="badge mb-2" style="background:linear-gradient(135deg,#1565c0,#1976d2);font-size:0.6rem;padding:4px 8px;">🏢 OMRAN Project</span>
+                            {% endif %}
+<h6>{{ fav.property.title }}</h6>
+                            <div class="prop-card-location"><i class="fas fa-map-marker-alt"></i> {{                                 fav.property.location }}</div>
+                            <div class="prop-card-price">OMR {{ "{:,.0f}".format(fav.property.price) }}</div>
+                            <div class="prop-card-actions">
+                                <button class="btn-fav active" onclick="toggleFav('{{ fav.property.id }}', this)"><i
+                                        class="fas fa-heart"></i> Remove</button>
+                                <button class="btn-contact"
+                                    onclick="openContact('{{ fav.property.agent_id }}', '{{ fav.property.id }}')"><i
+                                        class="fas fa-comment"></i> Contact</button>
+                                <a href="{{ url_for('main.property_detail', property_id=fav.property.id) }}"
+                                    class="btn-map"><i class="fas fa-eye"></i> View</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="col-12 text-center py-5">
+                    <div class="text-muted mb-3"><i class="far fa-heart fa-3x"></i></div>
+                    <h5>No favorites yet</h5>
+                    <p class="text-muted">Start searching for properties and save them here.</p>
+                    <a href="{{ url_for('main.home') }}" class="btn btn-primary">Start Search</a>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- ============ TAB: Messages ============ -->
+        <div class="tab-section" id="tab-messages">
+            <div class="section-header">
+                <i class="fas fa-comment-dots"></i>
+                <h5>Messages</h5>
+            </div>
+
+            {% if threads %}
+            <div style="display:flex;gap:0;border:1px solid #E8D5C0;border-radius:14px;overflow:hidden;height:480px;background:#FFFBF5;">
+                <!-- Conversation List (Left) -->
+                <div style="width:260px;border-right:1px solid #E8D5C0;overflow-y:auto;flex-shrink:0;background:#FFF8F0;">
+                    {% for thread in threads %}
+                    <div class="cust-thread-item {% if loop.first %}active{% endif %}" data-thread-id="{{ thread.user.id }}"
+                         onclick="openCustThread('{{ thread.user.id }}', this)"
+                         style="padding:14px 16px;cursor:pointer;border-bottom:1px solid #E8D5C0;transition:background 0.2s;{% if loop.first %}background:#FFFBF5;border-left:3px solid #C68B59;{% endif %}">
+                        <div style="display:flex;align-items:center;gap:10px;">
+                            <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#C68B59,#D4A574);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:0.85rem;flex-shrink:0;">
+                                {{ thread.user.username[0]|upper }}
+                            </div>
+                            <div style="flex:1;min-width:0;">
+                                <div style="font-weight:700;font-size:0.85rem;color:#3E2723;">{{ thread.user.username }}</div>
+                                <div style="font-size:0.72rem;color:#8D6E63;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                                    {{ thread.last_msg.content[:40] }}{% if thread.last_msg.content|length > 40 %}...{% endif %}
+                                </div>
+                            </div>
+                            {% if thread.unread > 0 %}
+                            <span style="background:#e53935;color:#fff;border-radius:50%;width:20px;height:20px;font-size:0.65rem;display:flex;align-items:center;justify-content:center;font-weight:700;">{{ thread.unread }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Chat Panel (Right) -->
+                <div style="flex:1;display:flex;flex-direction:column;">
+                    {% for thread in threads %}
+                    <div class="cust-chat-panel" id="cust-chat-{{ thread.user.id }}" style="flex:1;display:{% if loop.first %}flex{% else %}none{% endif %};flex-direction:column;">
+                        <!-- Chat Header -->
+                        <div style="padding:14px 20px;border-bottom:1px solid #E8D5C0;background:#FFF8F0;">
+                            <div style="font-weight:700;color:#3E2723;font-size:0.95rem;">
+                                <i class="fas fa-user-tie me-2" style="color:#C68B59;"></i>{{ thread.user.username }}
+                                <span style="font-size:0.72rem;color:#8D6E63;margin-left:8px;">{{ thread.user.role|capitalize }}</span>
+                            </div>
+                        </div>
+                        <!-- Messages -->
+                        <div style="flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;" id="cust-msgs-{{ thread.user.id }}">
+                            {% for msg in thread.messages %}
+                            <div style="display:flex;{% if msg.sender_id == current_user.id %}justify-content:flex-end{% else %}justify-content:flex-start{% endif %};">
+                                <div style="max-width:75%;padding:10px 14px;border-radius:{% if msg.sender_id == current_user.id %}14px 14px 4px 14px{% else %}14px 14px 14px 4px{% endif %};
+                                    {% if msg.sender_id == current_user.id %}background:linear-gradient(135deg,#C68B59,#D4A574);color:#fff;{% else %}background:#F5EDE4;color:#3E2723;{% endif %}
+                                    font-size:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                                    <div>{{ msg.content }}</div>
+                                    <div style="font-size:0.65rem;{% if msg.sender_id == current_user.id %}color:rgba(255,255,255,0.7){% else %}color:#8D6E63{% endif %};margin-top:4px;text-align:right;">
+                                        {{ msg.timestamp.strftime('%b %d, %H:%M') }}
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <!-- Reply Input -->
+                        <div style="padding:12px 16px;border-top:1px solid #E8D5C0;background:#FFF8F0;display:flex;gap:8px;">
+                            <input type="text" class="form-control cust-reply-input" data-receiver="{{ thread.user.id }}"
+                                   placeholder="Type a message..."
+                                   style="border:1.5px solid #E8D5C0;border-radius:20px;padding:8px 16px;font-size:0.85rem;background:#FFFDF8;"
+                                   onkeydown="if(event.key==='Enter')sendCustReply('{{ thread.user.id }}', this)">
+                            <button onclick="sendCustReply('{{ thread.user.id }}', this.previousElementSibling)"
+                                    style="background:linear-gradient(135deg,#C68B59,#D4A574);color:#fff;border:none;border-radius:50%;width:38px;height:38px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">
+                                <i class="fas fa-paper-plane" style="font-size:0.85rem;"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <div class="text-muted mb-3"><i class="far fa-comment-dots fa-3x"></i></div>
+                <h5>No messages yet</h5>
+                <p class="text-muted">Contact an agent from any property to start a conversation.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- ============ TAB: Recommendations ============ -->
+        <div class="tab-section" id="tab-recommendations">
+            <div class="section-header">
+                <i class="fas fa-chart-line"></i>
+                <h5>🤖 AI Investment Recommendations</h5>
+            </div>
+            <div class="row g-3">
+                {% for p in recommended %}
+                <div class="col-md-4">
+                    <div class="prop-card">
+                        <div class="prop-card-icon" style="height:120px;">
+                            {% if p.type == 'Villa' %}<i class="fas fa-home"></i>
+                            {% elif p.type == 'Apartment' %}<i class="fas fa-building"></i>
+                            {% elif p.type == 'Land' %}<i class="fas fa-mountain"></i>
+                            {% else %}<i class="fas fa-key"></i>{% endif %}
+                        </div>
+                        <div class="prop-card-body">
+                            {% if p.is_surooh %}<span class="badge mb-1"
+                                style="background:linear-gradient(135deg,#6a0080,#9c27b0);font-size:0.65rem;">🏛️
+                                Surooh</span>{% endif %}
+                            {% if p.is_omran %}<span class="badge mb-1"
+                                style="background:linear-gradient(135deg,#1565c0,#1976d2);font-size:0.65rem;">🏢
+                                OMRAN</span>{% endif %}
+                            <h6>{{ p.title[:45] }}{% if p.title|length > 45 %}...{% endif %}</h6>
+                            <div class="prop-card-location"><i class="fas fa-map-marker-alt"></i> {{ p.location }}</div>
+                            <div class="prop-card-price">OMR {{ "{:,.0f}".format(p.price) }}</div>
+                            <div class="prop-card-stats">
+                                <span class="prop-stat roi">📈 ROI {{ p.roi }}%</span>
+                                <span class="prop-stat">💰 OMR {{ "{:,.0f}".format(p.yearly_income) }}/yr</span>
+                                <span class="prop-stat">📊 Score {{ p._score }}</span>
+                            </div>
+                            <div class="prop-card-actions">
+                                <button class="btn-fav" onclick="toggleFav('{{ p.id }}', this)"><i
+                                        class="fas fa-heart"></i></button>
+                                <button class="btn-contact" onclick="openContact('{{ p.agent_id }}', '{{ p.id }}')"><i
+                                        class="fas fa-comment"></i></button>
+                                <a href="{{ url_for('main.property_detail', property_id=p.id) }}" class="btn-map"><i
+                                        class="fas fa-eye"></i> Details</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- ============ TAB: Recently Viewed ============ -->
+        <div class="tab-section" id="tab-history">
+            <div class="section-header">
+                <i class="fas fa-history"></i>
+                <h5>Recently Viewed Properties</h5>
+            </div>
+            <div class="row g-3">
+                {% for rv in recently_viewed %}
+                <div class="col-md-4">
+                    <div class="prop-card">
+                        <div class="prop-card-icon" style="height:120px;">
+                            <i class="fas fa-search"></i>
+                        </div>
+                        <div class="prop-card-body">
+                            
+                            {% if rv.property.is_surooh %}
+                            <span class="badge mb-2" style="background:linear-gradient(135deg,#6a0080,#9c27b0);font-size:0.6rem;padding:4px 8px;">🏛️ Surooh Project</span>
+                            {% elif rv.property.is_omran %}
+                            <span class="badge mb-2" style="background:linear-gradient(135deg,#1565c0,#1976d2);font-size:0.6rem;padding:4px 8px;">🏢 OMRAN Project</span>
+                            {% endif %}
+<h6>{{ rv.property.title[:45] }}{% if rv.property.title|length > 45 %}...{% endif %}</h6>
+                            <div class="prop-card-location"><i class="fas fa-map-marker-alt"></i> {{                                 rv.property.location }}</div>
+                            <div class="prop-card-price">OMR {{ "{:,.0f}".format(rv.property.price) }}</div>
+                            <div class="prop-card-actions mt-3">
+                                <a href="{{ url_for('main.property_detail', property_id=rv.property.id) }}"
+                                    class="btn-map" style="background:#FFF3E0;color:#E65100;width:100%"><i
+                                        class="fas fa-eye"></i> View Again</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="col-12 text-center py-5">
+                    <div class="text-muted mb-3"><i class="fas fa-history fa-3x"></i></div>
+                    <h5>No browsing history</h5>
+                    <p class="text-muted">Properties you view will appear here.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- Notification Badge/Toast Container -->
+<div id="notification-container"
+    style="position:fixed;bottom:20px;left:20px;z-index:9999;display:flex;flex-direction:column;gap:10px;"></div>
+
+<!-- Contact Modal -->
+<div class="contact-modal-backdrop" id="contactModal">
+    <div class="contact-modal">
+        <h5><i class="fas fa-paper-plane me-2" style="color:#C68B59;"></i>Send Message to Agent</h5>
+        <input type="hidden" id="contact-agent-id">
+        <input type="hidden" id="contact-property-id">
+        <textarea id="contact-message" placeholder="Hi, I'm interested in this property..."></textarea>
+        <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-secondary flex-fill" onclick="closeContact()">Cancel</button>
+            <button class="btn btn-primary flex-fill" onclick="sendContactMessage()"
+                style="background:#C68B59;border-color:#C68B59;">
+                <i class="fas fa-paper-plane me-1"></i> Send
+            </button>
+        </div>
+        <div id="contact-status" class="mt-2 text-center small"></div>
+    </div>
+</div>
+
+<script>
+    // ============ Tab Navigation ============
+    document.querySelectorAll('.nav-item[data-tab]').forEach(item => {
+        item.addEventListener('click', e => {
+            e.preventDefault();
+            const tab = item.dataset.tab;
+            document.querySelectorAll('.nav-item[data-tab]').forEach(n => n.classList.remove('active'));
+            item.classList.add('active');
+            document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+        });
+    });
+
+    // ============ Favorites ============
+    function toggleFav(propertyId, btn) {
+        fetch(`/favorite/${propertyId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin'
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'added') {
+                    btn.classList.add('active');
+                    btn.innerHTML = '<i class="fas fa-heart"></i> Saved';
+                } else {
+                    btn.classList.remove('active');
+                    btn.innerHTML = '<i class="fas fa-heart"></i>';
+                    const card = document.getElementById('fav-card-' + propertyId);
+                    if (card) card.style.display = 'none';
+                }
+            })
+            .catch(err => console.error('Fav error:', err));
+    }
+
+    // ============ Contact Modal ============
+    function openContact(agentId, propertyId) {
+        document.getElementById('contact-agent-id').value = agentId;
+        document.getElementById('contact-property-id').value = propertyId || '';
+        document.getElementById('contact-message').value = '';
+        document.getElementById('contact-status').textContent = '';
+        document.getElementById('contactModal').classList.add('show');
+    }
+    function closeContact() {
+        document.getElementById('contactModal').classList.remove('show');
+    }
+    function sendContactMessage() {
+        const agentId = parseInt(document.getElementById('contact-agent-id').value);
+        const propertyId = document.getElementById('contact-property-id').value;
+        const message = document.getElementById('contact-message').value.trim();
+        const statusDiv = document.getElementById('contact-status');
+
+        if (!message) { statusDiv.textContent = '⚠️ Please write a message'; return; }
+
+        fetch('/api/send_message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ agent_id: agentId, message: message, property_id: propertyId || null })
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'sent') {
+                    statusDiv.innerHTML = '<span class="text-success">✅ Message sent successfully!</span>';
+                    setTimeout(closeContact, 1500);
+                } else {
+                    statusDiv.innerHTML = '<span class="text-danger">❌ ' + (data.error || 'Failed') + '</span>';
+                }
+            })
+            .catch(err => { statusDiv.innerHTML = '<span class="text-danger">❌ Network error</span>'; });
+    }
+
+    // ============ Notifications Polling ============
+    const notifiedIds = new Set();
+    setInterval(() => {
+        fetch('/api/notifications')
+            .then(r => r.json())
+            .then(notifs => {
+                const container = document.getElementById('notification-container');
+                notifs.forEach(n => {
+                    if (!notifiedIds.has(n.id)) {
+                        notifiedIds.add(n.id);
+                        const toast = document.createElement('div');
+                        toast.style.cssText = "background:#FFFBF5;border-left:4px solid #C68B59;padding:12px 18px;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.1);display:flex;align-items:center;gap:12px;animation:slideIn 0.3s ease-out;";
+                        toast.innerHTML = `
+                    <i class="fas fa-bell" style="color:#C68B59;font-size:1.2rem;"></i>
+                    <div style="flex:1">
+                        <div style="font-weight:700;color:#3E2723;font-size:0.85rem;">New Notification</div>
+                        <div style="color:#5D4037;font-size:0.8rem;">${n.message}</div>
+                    </div>
+                    <div style="color:#8D6E63;font-size:0.7rem;">${n.timestamp}</div>
+                    <button style="border:none;background:none;color:#999;cursor:pointer;" onclick="markRead(${n.id}, this)"><i class="fas fa-times"></i></button>
+                `;
+                        // Add keyframes if not exists
+                        if (!document.getElementById('toast-anim')) {
+                            const style = document.createElement('style');
+                            style.id = 'toast-anim';
+                            style.innerHTML = `@keyframes slideIn { from{transform:translateX(-100%);opacity:0} to{transform:translateX(0);opacity:1} }`;
+                            document.head.appendChild(style);
+                        }
+                        container.appendChild(toast);
+                    }
+                });
+            });
+    }, 5000);
+
+    function markRead(id, btn) {
+        fetch('/api/notifications/read/' + id, { method: 'POST' });
+        btn.parentElement.remove();
+    }
+
+    // Close modal on backdrop click
+    document.getElementById('contactModal').addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeContact();
+    });
+
+    // ============ Threaded Messages ============
+    function openCustThread(userId, el) {
+        // Hide all chat panels
+        document.querySelectorAll('.cust-chat-panel').forEach(p => p.style.display = 'none');
+        // Show selected
+        const panel = document.getElementById('cust-chat-' + userId);
+        if (panel) {
+            panel.style.display = 'flex';
+            // Scroll to bottom
+            const msgsDiv = document.getElementById('cust-msgs-' + userId);
+            if (msgsDiv) msgsDiv.scrollTop = msgsDiv.scrollHeight;
+        }
+        // Update sidebar active state
+        document.querySelectorAll('.cust-thread-item').forEach(t => {
+            t.style.background = '';
+            t.style.borderLeft = '';
+            t.classList.remove('active');
+        });
+        el.style.background = '#FFFBF5';
+        el.style.borderLeft = '3px solid #C68B59';
+        el.classList.add('active');
+    }
+
+    function sendCustReply(receiverId, inputEl) {
+        const message = inputEl.value.trim();
+        if (!message) return;
+        inputEl.disabled = true;
+
+        fetch('/api/send_message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ agent_id: receiverId, message: message })
+        })
+        .then(r => r.json())
+        .then(data => {
+            inputEl.disabled = false;
+            if (data.status === 'sent') {
+                inputEl.value = '';
+                // Append new message bubble
+                const msgsDiv = document.getElementById('cust-msgs-' + receiverId);
+                const now = new Date();
+                const timeStr = now.toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false });
+                const bubble = document.createElement('div');
+                bubble.style.cssText = 'display:flex;justify-content:flex-end;';
+                bubble.innerHTML = `
+                    <div style="max-width:75%;padding:10px 14px;border-radius:14px 14px 4px 14px;background:linear-gradient(135deg,#C68B59,#D4A574);color:#fff;font-size:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+                        <div>${message}</div>
+                        <div style="font-size:0.65rem;color:rgba(255,255,255,0.7);margin-top:4px;text-align:right;">${timeStr}</div>
+                    </div>`;
+                msgsDiv.appendChild(bubble);
+                msgsDiv.scrollTop = msgsDiv.scrollHeight;
+            }
+        })
+        .catch(() => { inputEl.disabled = false; });
+    }
+
+    // Auto-scroll all chat panels to bottom on load
+    document.querySelectorAll('[id^="cust-msgs-"]').forEach(div => {
+        div.scrollTop = div.scrollHeight;
+    });
+</script>
+
+{% endblock %}

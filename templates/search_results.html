@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <h2 class="mb-0">
+            {% if request.args.get('type') %}
+                {{ request.args.get('type') }} Listings
+            {% else %}
+                All Properties
+            {% endif %}
+        </h2>
+        <span class="badge bg-secondary fs-6">{{ properties|length }} found</span>
+    </div>
+
+    <!-- Refine search bar -->
+    <div class="card border-0 shadow-sm p-3 mb-4">
+        <form action="{{ url_for('main.search') }}" method="GET" class="d-flex gap-2 flex-wrap align-items-center">
+            <input type="text" name="location" class="form-control" placeholder="Location"
+                value="{{ request.args.get('location', '') }}" style="max-width:250px;">
+            <select name="type" class="form-select" style="max-width:200px;">
+                <option value="">All Types</option>
+                {% for t in ['Villa','Apartment','Land','Townhouse','Office','Commercial'] %}
+                <option value="{{ t }}" {% if request.args.get('type') == t %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+            <input type="number" name="price_min" class="form-control" placeholder="Min Price"
+                value="{{ request.args.get('price_min', '') }}" style="max-width:120px;" step="1000">
+            <input type="number" name="price_max" class="form-control" placeholder="Max Price"
+                value="{{ request.args.get('price_max', '') }}" style="max-width:120px;" step="1000">
+            <select name="sort" class="form-select" style="max-width:180px;">
+                <option value="">Sort By</option>
+                <option value="cheapest" {% if request.args.get('sort') == 'cheapest' %}selected{% endif %}>Cheapest First</option>
+                <option value="highest_roi" {% if request.args.get('sort') == 'highest_roi' %}selected{% endif %}>Highest ROI</option>
+                <option value="best_investment" {% if request.args.get('sort') == 'best_investment' %}selected{% endif %}>Best Investment (AI)</option>
+            </select>
+            <button type="submit" class="btn btn-primary">Search</button>
+            {% if request.args.get('type') or request.args.get('location') or surooh_only or omran_only %}
+            <a href="{{ url_for('main.search') }}" class="btn btn-outline-secondary">Clear</a>
+            {% endif %}
+        </form>
+        <!-- Filter toggles: Surooh + OMRAN -->
+        <div class="mt-2 d-flex gap-2 flex-wrap">
+            {% if surooh_only %}
+            <a href="{{ url_for('main.search', location=request.args.get('location',''), type=request.args.get('type','')) }}"
+               class="btn btn-sm" style="background:linear-gradient(135deg,#6a0080,#9c27b0);color:#fff;border-radius:20px;">
+                <i class="fas fa-star me-1"></i>Surooh Only <i class="fas fa-times ms-2"></i>
+            </a>
+            {% else %}
+            <a href="{{ url_for('main.search', location=request.args.get('location',''), type=request.args.get('type',''), surooh_only=1) }}"
+               class="btn btn-sm btn-outline-secondary" style="border-radius:20px;">
+                <i class="fas fa-star me-1" style="color:#9c27b0;"></i>Surooh Only
+            </a>
+            {% endif %}
+            {% if omran_only %}
+            <a href="{{ url_for('main.search', location=request.args.get('location',''), type=request.args.get('type','')) }}"
+               class="btn btn-sm" style="background:linear-gradient(135deg,#1565c0,#42a5f5);color:#fff;border-radius:20px;">
+                <i class="fas fa-building me-1"></i>OMRAN Only <i class="fas fa-times ms-2"></i>
+            </a>
+            {% else %}
+            <a href="{{ url_for('main.search', location=request.args.get('location',''), type=request.args.get('type',''), omran_only=1) }}"
+               class="btn btn-sm btn-outline-secondary" style="border-radius:20px;">
+                <i class="fas fa-building me-1" style="color:#1976d2;"></i>OMRAN Only
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% if surooh_only %}
+    <div class="alert d-flex align-items-center gap-2 mb-3" style="background:linear-gradient(135deg,rgba(106,0,128,0.08),rgba(156,39,176,0.12));border:1px solid rgba(156,39,176,0.3);border-radius:12px;">
+        <i class="fas fa-star" style="color:#9c27b0;font-size:1.2rem;"></i>
+        <div><strong style="color:#6a0080;">Showing Surooh Government Projects Only</strong><br>
+        <small class="text-muted">Official Surooh housing developments from the Omani government.</small></div>
+    </div>
+    {% elif omran_only %}
+    <div class="alert d-flex align-items-center gap-2 mb-3" style="background:linear-gradient(135deg,rgba(21,101,192,0.08),rgba(66,165,245,0.12));border:1px solid rgba(25,118,210,0.3);border-radius:12px;">
+        <i class="fas fa-building" style="color:#1976d2;font-size:1.2rem;"></i>
+        <div><strong style="color:#0d47a1;">Showing OMRAN Group Projects Only</strong><br>
+        <small class="text-muted">Premium developments by OMRAN Group — Oman's leading real estate developer.</small></div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        {% for property in properties %}
+        <div class="col-md-4 mb-4">
+            <div class="card h-100 property-card border-0 shadow-sm">
+                {% set main_image = property.images|selectattr('is_main', 'equalto', true)|first %}
+                {% if main_image %}
+                <div class="card-img-top"
+                    style="height:200px; background: url('{{ url_for('static', filename='uploads/properties/' + main_image.image_filename) }}') center/cover no-repeat;">
+                </div>
+                {% else %}
+                <div class="card-img-top d-flex align-items-center justify-content-center"
+                    style="height:200px; background:linear-gradient(135deg,#f5e6d0,#e8cfa8);">
+                    <div class="text-center">
+                        {% if property.type == 'Villa' %}<i class="fas fa-home fa-3x mb-2" style="color:#b5935a;"></i>
+                        {% elif property.type == 'Apartment' %}<i class="fas fa-building fa-3x mb-2" style="color:#b5935a;"></i>
+                        {% elif property.type == 'Land' %}<i class="fas fa-mountain fa-3x mb-2" style="color:#b5935a;"></i>
+                        {% elif property.type == 'Townhouse' %}<i class="fas fa-city fa-3x mb-2" style="color:#b5935a;"></i>
+                        {% else %}<i class="fas fa-key fa-3x mb-2" style="color:#b5935a;"></i>{% endif %}
+                        <p class="mb-0 small fw-semibold text-muted">{{ property.type }}</p>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="card-body">
+                    {% if property.is_surooh %}
+                    <span class="badge mb-2" style="background:linear-gradient(135deg,#6a0080,#9c27b0);font-size:0.7rem;">🏛️ Surooh Project</span>
+                    {% elif property.is_omran %}
+                    <span class="badge mb-2" style="background:linear-gradient(135deg,#1565c0,#1976d2);font-size:0.7rem;">🏢 OMRAN Project</span>
+                    {% else %}
+                    <span class="badge mb-2" style="background:#b5935a;">{{ property.type }}</span>
+                    {% endif %}
+                    <h5 class="card-title">{{ property.title }}</h5>
+                    <p class="card-text text-muted small"><i class="fas fa-map-marker-alt me-1"></i>{{ property.location }}</p>
+                    <h6 class="fw-bold" style="color:#b5935a;">OMR {{ "{:,.0f}".format(property.price) }}</h6>
+                    {% if property.size %}<p class="text-muted small mb-2"><i class="fas fa-ruler-combined me-1"></i>{{ property.size|int }} sqm</p>{% endif %}
+                    <a href="{{ url_for('main.property_detail', property_id=property.id) }}"
+                        class="btn btn-outline-primary w-100 mt-2">View Details</a>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <!-- No results message -->
+        <div class="col-12">
+            <div class="text-center py-5">
+                <i class="fas fa-search fa-4x mb-3" style="color:#ccc;"></i>
+                <h4 class="text-muted">
+                    No {{ request.args.get('type') or 'properties' }} found
+                    {% if request.args.get('location') %} in "{{ request.args.get('location') }}"{% endif %}
+                </h4>
+                <p class="text-muted">Try a different type or location.</p>
+                <a href="{{ url_for('main.search') }}" class="btn btn-primary mt-2">View All Properties</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

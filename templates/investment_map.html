@@ -1,0 +1,428 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css" />
+
+<style>
+  .map-page-wrapper {
+    display: flex; gap: 0; height: calc(100vh - 130px); min-height: 520px;
+    border-radius: 16px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+  }
+  .map-sidebar {
+    width: 320px; min-width: 280px;
+    background: linear-gradient(180deg,#1c0d00 0%,#2d1400 100%);
+    color: #f5e6d0; display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+  }
+  .sidebar-header { padding: 22px 20px 14px; border-bottom: 1px solid rgba(181,147,90,0.25); }
+  .sidebar-header h2 { font-size: 1.15rem; font-weight:700; color:#e8bc70; margin:0 0 4px; letter-spacing:.5px; }
+  .sidebar-header p  { font-size: 0.78rem; color: rgba(245,230,208,0.6); margin: 0; }
+
+  .filter-section { padding: 14px 20px; border-bottom: 1px solid rgba(181,147,90,0.2); }
+  .filter-section label {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: .8px;
+    text-transform: uppercase; color: #b5935a; display: block; margin-bottom: 6px;
+  }
+  .filter-btn-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .flt-btn {
+    padding: 5px 12px; border-radius: 20px; border: 1px solid rgba(181,147,90,0.4);
+    background: rgba(181,147,90,0.08); color: #d4a96a; font-size: 0.76rem;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .flt-btn.active,.flt-btn:hover { background: #b5935a; color:#fff; border-color:#b5935a; }
+  .flt-btn.surooh-btn.active,.flt-btn.surooh-btn:hover {
+    background: linear-gradient(135deg,#7b00c4,#c97dff); border-color:#9b33e8; color:#fff;
+  }
+  .flt-btn.omran-btn.active,.flt-btn.omran-btn:hover {
+    background: linear-gradient(135deg,#1565c0,#42a5f5); border-color:#1976d2; color:#fff;
+  }
+
+  .legend-section { padding: 14px 20px; border-bottom: 1px solid rgba(181,147,90,0.2); }
+  .legend-section label {
+    font-size: 0.72rem; font-weight: 600; letter-spacing: .8px;
+    text-transform: uppercase; color: #b5935a; display: block; margin-bottom: 8px;
+  }
+  .legend-item { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; font-size: 0.82rem; }
+  .legend-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 6px currentColor; }
+  .legend-dot.red    { background:#e53935; color:#e53935; }
+  .legend-dot.orange { background:#fb8c00; color:#fb8c00; }
+  .legend-dot.green  { background:#43a047; color:#43a047; }
+  .legend-dot.purple { background:#9c27b0; color:#9c27b0; }
+  .legend-dot.blue   { background:#1976d2; color:#1976d2; }
+  .legend-label { color:#f5e6d0; flex:1; }
+  .legend-tag { font-size:.68rem; padding:2px 7px; border-radius:10px; font-weight:600; }
+  .legend-tag.red    { background:rgba(229,57,53,.2);  color:#ef9a9a; }
+  .legend-tag.orange { background:rgba(251,140,0,.2);  color:#ffcc80; }
+  .legend-tag.green  { background:rgba(67,160,71,.2);  color:#a5d6a7; }
+  .legend-tag.purple { background:rgba(156,39,176,.25);color:#ce93d8; }
+  .legend-tag.blue   { background:rgba(25,118,210,.2); color:#90caf9; }
+
+  .area-list { flex:1; overflow-y:auto; padding:10px 12px; }
+  .area-list::-webkit-scrollbar { width:4px; }
+  .area-list::-webkit-scrollbar-thumb { background:rgba(181,147,90,0.3); border-radius:4px; }
+
+  .area-card {
+    background:rgba(255,255,255,0.04); border:1px solid rgba(181,147,90,0.15);
+    border-radius:10px; padding:10px 12px; margin-bottom:7px;
+    cursor:pointer; transition:all .2s; display:flex; align-items:center; gap:10px;
+    overflow:hidden;
+  }
+  .area-thumb { width:44px; height:44px; border-radius:8px; object-fit:cover; flex-shrink:0; box-shadow:0 1px 4px rgba(0,0,0,.3); }
+  .area-card:hover            { background:rgba(181,147,90,0.12); border-color:#b5935a; }
+  .area-card.surooh-card      { border-color:rgba(156,39,176,0.3); }
+  .area-card.surooh-card:hover{ background:rgba(156,39,176,0.12); border-color:#9c27b0; }
+  .area-card.omran-card       { border-color:rgba(25,118,210,0.3); }
+  .area-card.omran-card:hover { background:rgba(25,118,210,0.12); border-color:#1976d2; }
+
+  .area-badge { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .area-badge.red    { background:#e53935; box-shadow:0 0 6px #e53935; }
+  .area-badge.orange { background:#fb8c00; box-shadow:0 0 6px #fb8c00; }
+  .area-badge.green  { background:#43a047; box-shadow:0 0 6px #43a047; }
+  .area-badge.purple { background:#9c27b0; box-shadow:0 0 6px #9c27b0; }
+  .area-badge.blue   { background:#1976d2; box-shadow:0 0 6px #1976d2; }
+  .area-info { flex:1; min-width:0; }
+  .area-name { font-size:.8rem; font-weight:600; color:#f5e6d0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .area-meta { font-size:.7rem; color:rgba(245,230,208,0.5); margin-top:1px; }
+  .area-score { font-size:.9rem; font-weight:700; color:#e8bc70; flex-shrink:0; }
+
+  .badge-pill {
+    font-size:.62rem; padding:1px 6px; border-radius:8px; font-weight:700; letter-spacing:.3px;
+    display:inline-block;
+  }
+  .badge-pill.surooh { background:rgba(156,39,176,0.25); color:#ce93d8; border:1px solid rgba(156,39,176,0.4); }
+  .badge-pill.omran  { background:rgba(25,118,210,0.2);  color:#90caf9; border:1px solid rgba(25,118,210,0.4);  }
+
+  #investment-map { flex:1; min-width:0; }
+
+  /* Popups */
+  .inv-popup { font-family:'Outfit',sans-serif; min-width:260px; max-width:320px; }
+  .inv-popup .popup-img { width:100%; height:140px; object-fit:cover; border-radius:8px; margin-bottom:10px; box-shadow:0 2px 8px rgba(0,0,0,.15); }
+  .inv-popup h3 { font-size:.95rem; font-weight:700; margin:0 0 8px; color:#1c0d00; border-bottom:2px solid #b5935a; padding-bottom:6px; }
+  .inv-popup h3.surooh-title { border-bottom-color:#9c27b0; }
+  .inv-popup h3.omran-title  { border-bottom-color:#1976d2; }
+  .inv-popup .stat-row { display:flex; justify-content:space-between; font-size:.78rem; margin-bottom:4px; color:#4a3820; }
+  .inv-popup .stat-val { font-weight:600; color:#1c0d00; }
+  .inv-popup .rec-badge { margin-top:10px; padding:5px 10px; border-radius:20px; font-size:.78rem; font-weight:700; text-align:center; width:fit-content; }
+  .inv-popup .rec-badge.red    { background:#ffeaea; color:#c62828; border:1px solid #e57373; }
+  .inv-popup .rec-badge.orange { background:#fff3e0; color:#e65100; border:1px solid #ffb74d; }
+  .inv-popup .rec-badge.green  { background:#e8f5e9; color:#1b5e20; border:1px solid #81c784; }
+  .inv-popup .rec-badge.purple { background:#f3e5f5; color:#6a0080; border:1px solid #ce93d8; }
+  .inv-popup .rec-badge.blue   { background:#e3f2fd; color:#0d47a1; border:1px solid #90caf9; }
+  .inv-popup .omran-desc       { font-size:.76rem; color:#555; margin-top:6px; line-height:1.4; border-top:1px solid #eee; padding-top:6px; }
+
+  @media(max-width:768px){
+    .map-page-wrapper{flex-direction:column;height:auto;}
+    .map-sidebar{width:100%;min-width:unset;max-height:300px;}
+    #investment-map{height:60vh;}
+  }
+</style>
+
+<!-- Page heading -->
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="mb-0 fw-bold" style="color:#1c0d00;font-size:1.5rem;">
+      <i class="fas fa-map-marked-alt me-2" style="color:#b5935a;"></i>Smart Investment Map
+    </h1>
+    <p class="text-muted small mb-0">Oman's investment zones · Surooh government projects · OMRAN Group developments</p>
+  </div>
+  <a href="{{ url_for('main.home') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="fas fa-arrow-left me-1"></i>Back
+  </a>
+</div>
+
+<div class="map-page-wrapper">
+  <aside class="map-sidebar">
+    <div class="sidebar-header">
+      <h2><i class="fas fa-chart-line me-2"></i>Investment Zones</h2>
+      <p id="zone-count">Loading…</p>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-section">
+      <label>Filter by Source</label>
+      <div class="filter-btn-group">
+        <button class="flt-btn active" data-filter="all">All</button>
+        <button class="flt-btn" data-filter="red">
+          <i class="fas fa-circle" style="color:#e53935;font-size:.6rem;"></i> High
+        </button>
+        <button class="flt-btn" data-filter="orange">
+          <i class="fas fa-circle" style="color:#fb8c00;font-size:.6rem;"></i> Medium
+        </button>
+        <button class="flt-btn" data-filter="green">
+          <i class="fas fa-circle" style="color:#43a047;font-size:.6rem;"></i> Low
+        </button>
+        <button class="flt-btn surooh-btn" data-filter="surooh">
+          <i class="fas fa-star" style="color:#ce93d8;font-size:.6rem;"></i> Surooh
+        </button>
+        <button class="flt-btn omran-btn" data-filter="omran">
+          <i class="fas fa-building" style="color:#90caf9;font-size:.6rem;"></i> OMRAN
+        </button>
+        <button class="flt-btn" data-filter="heat" style="background:linear-gradient(135deg,rgba(255,87,34,0.1),rgba(255,193,7,0.2));border:1px solid #ff9800;color:#e65100;">
+          <i class="fas fa-fire" style="color:#ff5722;font-size:.6rem;"></i> Heatmap
+        </button>
+      </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend-section">
+      <label>Legend</label>
+      <div class="legend-item">
+        <div class="legend-dot red"></div>
+        <span class="legend-label">High Potential (&gt;80)</span>
+        <span class="legend-tag red">Strong Buy</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot orange"></div>
+        <span class="legend-label">Medium (50–80)</span>
+        <span class="legend-tag orange">Moderate</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot green"></div>
+        <span class="legend-label">Low (&lt;50)</span>
+        <span class="legend-tag green">Risky</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot purple"></div>
+        <span class="legend-label">🏛️ Surooh Gov. Project</span>
+        <span class="legend-tag purple">Official</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot blue"></div>
+        <span class="legend-label">🏢 OMRAN Group</span>
+        <span class="legend-tag blue">Premium</span>
+      </div>
+    </div>
+
+    <div class="area-list" id="area-list">
+      <div class="text-center py-4" style="color:rgba(245,230,208,0.4);font-size:.85rem;">
+        <i class="fas fa-spinner fa-spin"></i> Loading…
+      </div>
+    </div>
+  </aside>
+
+  <div id="investment-map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+
+<script>
+(function(){
+  const map = L.map('investment-map',{center:[22.5,57.5],zoom:6});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{
+    attribution:'© OpenStreetMap contributors © CARTO', maxZoom:19
+  }).addTo(map);
+
+  let allAreas=[], allSurooh=[], allOmran=[];
+  let layers=[];
+  let clusterGroup = L.markerClusterGroup();
+  let heatLayer = null;
+  map.addLayer(clusterGroup);
+  let activeFilter='all';
+
+  const cfg = {
+    red:    {fill:'#e53935',stroke:'#b71c1c'},
+    orange: {fill:'#fb8c00',stroke:'#e65100'},
+    green:  {fill:'#43a047',stroke:'#1b5e20'},
+    purple: {fill:'#9c27b0',stroke:'#6a0080'},
+    blue:   {fill:'#1976d2',stroke:'#0d47a1'},
+  };
+
+  // ── Popups ──────────────────────────────────────────────────
+  function makeAreaPopup(a){
+    const icon={'Strong Buy':'🚀','Moderate':'📊','Risky':'⚠️'}[a.recommendation]||'';
+    return `<div class="inv-popup">
+      <h3>${a.name}</h3>
+      <div class="stat-row"><span>📍 Score</span>        <span class="stat-val">${a.score}/100</span></div>
+      <div class="stat-row"><span>💰 Avg Price</span>    <span class="stat-val">OMR ${a.avg_price.toLocaleString()}</span></div>
+      <div class="stat-row"><span>📈 Price Growth</span> <span class="stat-val">${a.price_growth}%</span></div>
+      <div class="stat-row"><span>🔥 Demand</span>       <span class="stat-val">${a.demand}/100</span></div>
+      <div class="rec-badge ${a.color}">${icon} ${a.recommendation}</div>
+    </div>`;
+  }
+
+  function makeSuroohPopup(s){
+    const imgTag = s.image_url ? `<img src="${s.image_url}" class="popup-img" alt="${s.name}">` : '';
+    return `<div class="inv-popup">
+      ${imgTag}
+      <h3 class="surooh-title">🏛️ ${s.name}</h3>
+      <div style="font-size:.7rem;color:#7b00c4;font-weight:600;margin-bottom:8px;">Surooh Government Project</div>
+      <div class="stat-row"><span>📍 City</span>         <span class="stat-val">${s.city}, ${s.region}</span></div>
+      <div class="stat-row"><span>🏠 Total Units</span>  <span class="stat-val">${s.total_units.toLocaleString()}</span></div>
+      <div class="stat-row"><span>🏡 Villas</span>       <span class="stat-val">${s.villas}</span></div>
+      <div class="stat-row"><span>🏢 Apartments</span>   <span class="stat-val">${s.apartments}</span></div>
+      <div class="stat-row"><span>💼 Investment</span>   <span class="stat-val">OMR ${s.investment}M</span></div>
+      <div class="rec-badge purple">✅ ${s.data_type} Data</div>
+    </div>`;
+  }
+
+  function makeOmranPopup(o){
+    // Mock predicting future price dynamically on frontend for display
+    let futurePrice = o.price ? (o.price * 1.25) : 0; 
+    let colorClass = o.score > 80 ? 'green' : o.score > 50 ? 'orange' : 'red';
+    const imgTag = o.image_url ? `<img src="${o.image_url}" class="popup-img" alt="${o.name}">` : '';
+    return `<div class="inv-popup">
+      ${imgTag}
+      <h3 class="omran-title">🏢 ${o.name}</h3>
+      <div style="font-size:.7rem;color:#1565c0;font-weight:600;margin-bottom:8px;">OMRAN Group Project</div>
+      <div class="stat-row"><span>🏙️ City</span>          <span class="stat-val">${o.city}</span></div>
+      <div class="stat-row"><span>🏠 Type</span>          <span class="stat-val">${o.type}</span></div>
+      <div class="stat-row"><span>💰 Price</span>         <span class="stat-val">OMR ${(o.price||0).toLocaleString()}</span></div>
+      <div class="stat-row"><span>🔮 Pred 5y Price</span> <span class="stat-val">OMR ${futurePrice.toLocaleString()}</span></div>
+      <div class="stat-row"><span>🤖 AI Score</span>      <span class="stat-val text-${colorClass=="red"?"danger":(colorClass=="orange"?"warning":"success")} fw-bold">${o.score||85}/100</span></div>
+      <div class="omran-desc">${o.description||''}</div>
+      <div class="rec-badge ${colorClass}">🏆 AI Intel Loaded</div>
+    </div>`;
+  }
+
+  // ── Render ──────────────────────────────────────────────────
+  function scoreToRadius(s){ return 2000+(s/100)*5000; }
+
+  function renderAll(areas, surooh, omran){
+    layers.forEach(l=>map.removeLayer(l)); layers=[];
+    clusterGroup.clearLayers();
+    if(heatLayer){ map.removeLayer(heatLayer); heatLayer=null; }
+
+    if (activeFilter === 'heat') {
+      let heatData = [];
+      areas.forEach(a => heatData.push([a.lat, a.lng, a.score / 100]));
+      surooh.forEach(s => heatData.push([s.lat, s.lng, 0.8]));
+      omran.forEach(o => heatData.push([o.lat, o.lng, (o.score || 85) / 100]));
+      heatLayer = L.heatLayer(heatData, {radius: 40, blur: 25, maxZoom: 12}).addTo(map);
+      return;
+    }
+
+    areas.forEach(a=>{
+      const c=cfg[a.color];
+      const ci=L.circle([a.lat,a.lng],{
+        radius:scoreToRadius(a.score),color:c.stroke,fillColor:c.fill,
+        fillOpacity:0.28,weight:2
+      }).addTo(map).bindPopup(makeAreaPopup(a),{maxWidth:270});
+      layers.push(ci);
+    });
+
+    surooh.forEach(s=>{
+      const radius=4500+(s.total_units/1500)*3000;
+      const ci=L.circle([s.lat,s.lng],{
+        radius,color:cfg.purple.stroke,fillColor:cfg.purple.fill,
+        fillOpacity:0.20,weight:2,dashArray:'6 4'
+      }).addTo(map).bindPopup(makeSuroohPopup(s),{maxWidth:280});
+      layers.push(ci);
+    });
+
+    // OMRAN: individual markers per property (cluster by proximity)
+    omran.forEach(o=>{
+      let sco = o.score || 85;
+      let circleColor = sco > 80 ? cfg.green : sco > 50 ? cfg.orange : cfg.red;
+      const marker=L.circleMarker([o.lat,o.lng],{
+        radius:8,color:circleColor.stroke,fillColor:circleColor.fill,
+        fillOpacity:0.9,weight:2
+      }).bindPopup(makeOmranPopup(o),{maxWidth:290});
+      clusterGroup.addLayer(marker);
+    });
+  }
+
+  // ── Sidebar list ────────────────────────────────────────────
+  function renderList(areas, surooh, omran){
+    const el=document.getElementById('area-list');
+    const total=areas.length+surooh.length+omran.length;
+    document.getElementById('zone-count').textContent=
+      `${total} zone${total!==1?'s':''} displayed`;
+
+    if(!total){
+      el.innerHTML=`<div class="text-center py-4" style="color:rgba(245,230,208,0.4);font-size:.85rem;">No zones match.</div>`;
+      return;
+    }
+
+    const aCards=[...areas].sort((a,b)=>b.score-a.score).map(a=>({
+      kind:'area',color:a.color,name:a.name,lat:a.lat,lng:a.lng,
+      meta:`OMR ${a.avg_price.toLocaleString()} · ${a.recommendation}`,score:a.score
+    }));
+
+    // Group Surooh by project name
+    const sCards=surooh.map(s=>({
+      kind:'surooh',color:'purple',name:s.name,lat:s.lat,lng:s.lng,
+      meta:`${s.city} · ${s.total_units} units`,score:null,
+      image_url:s.image_url||null
+    }));
+
+    // Show unique OMRAN projects in sidebar
+    const omranProjects={};
+    omran.forEach(o=>{
+      const key=o.name+'|'+o.city;
+      if(!omranProjects[key]) omranProjects[key]={...o,count:0};
+      omranProjects[key].count++;
+    });
+    const oCards=Object.values(omranProjects).map(o=>({
+      kind:'omran',color:'blue',name:o.name,lat:o.lat,lng:o.lng,
+      meta:`${o.city} · ${o.count} units · OMR ${(o.price||0).toLocaleString()}`,score:null,
+      image_url:o.image_url||null
+    }));
+
+    const combined=[...aCards,...sCards,...oCards];
+    el.innerHTML=combined.map((item,i)=>{
+      const thumbHtml = item.image_url
+        ? `<img src="${item.image_url}" class="area-thumb" alt="${item.name}">`
+        : `<div class="area-badge ${item.color}"></div>`;
+      return `
+      <div class="area-card ${item.kind==='surooh'?'surooh-card':item.kind==='omran'?'omran-card':''}"
+           data-lat="${item.lat}" data-lng="${item.lng}" data-idx="${i}">
+        ${thumbHtml}
+        <div class="area-info">
+          <div class="area-name">${item.name}
+            ${item.kind==='surooh'?'<span class="badge-pill surooh ms-1">🏛️ Surooh</span>':''}
+            ${item.kind==='omran' ?'<span class="badge-pill omran ms-1">🏢 OMRAN</span>' :''}
+          </div>
+          <div class="area-meta">${item.meta}</div>
+        </div>
+        <div class="area-score">${item.score!==null?item.score:''}</div>
+      </div>`;
+    }).join('');
+
+    el.querySelectorAll('.area-card').forEach(card=>{
+      card.addEventListener('click',()=>{
+        const lat=parseFloat(card.dataset.lat);
+        const lng=parseFloat(card.dataset.lng);
+        map.flyTo([lat,lng],14,{duration:1});
+      });
+    });
+  }
+
+  // ── Apply filter ─────────────────────────────────────────────
+  function applyFilter(filter){
+    activeFilter=filter;
+    let fAreas=allAreas, fSurooh=allSurooh, fOmran=allOmran;
+    if(filter==='surooh'){ fAreas=[]; fOmran=[]; }
+    else if(filter==='omran'){ fAreas=[]; fSurooh=[]; }
+    else if(filter==='heat'){ /* show all but formatted as heat in renderAll */ }
+    else if(filter!=='all'){ fSurooh=[]; fOmran=[]; fAreas=allAreas.filter(a=>a.color===filter); }
+    renderAll(fAreas,fSurooh,fOmran);
+    renderList(fAreas,fSurooh,fOmran);
+  }
+
+  document.querySelectorAll('.flt-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('.flt-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      applyFilter(btn.dataset.filter);
+    });
+  });
+
+  // ── Fetch all 3 datasets ─────────────────────────────────────
+  Promise.all([
+    fetch('/api/areas').then(r=>r.json()),
+    fetch('/api/surooh_projects').then(r=>r.json()),
+    fetch('/api/omran_properties').then(r=>r.json()),
+  ]).then(([areas,surooh,omran])=>{
+    allAreas=areas; allSurooh=surooh; allOmran=omran;
+    applyFilter('all');
+  }).catch(()=>{
+    document.getElementById('zone-count').textContent='Failed to load data';
+  });
+})();
+</script>
+
+{% endblock %}

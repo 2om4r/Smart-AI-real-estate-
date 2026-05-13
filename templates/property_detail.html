@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-md-8">
+            {% if property.images %}
+            <div id="propertyCarousel" class="carousel slide mb-4" data-bs-ride="carousel">
+                <div class="carousel-indicators">
+                    {% for img in property.images %}
+                    <button type="button" data-bs-target="#propertyCarousel" data-bs-slide-to="{{ loop.index0 }}" {% if loop.first %}class="active"{% endif %} aria-label="Slide {{ loop.index }}"></button>
+                    {% endfor %}
+                </div>
+                <div class="carousel-inner rounded" style="max-height:500px;background:#000;">
+                    {% for img in property.images %}
+                    <div class="carousel-item {% if loop.first %}active{% endif %}" style="height:500px;">
+                        <img src="{{ url_for('static', filename='uploads/properties/' + img.image_filename) }}"
+                             class="d-block w-100 h-100" style="object-fit:cover;" alt="Property Image {{ loop.index }}">
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if property.images|length > 1 %}
+                <button class="carousel-control-prev" type="button" data-bs-target="#propertyCarousel" data-bs-slide="prev">
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Previous</span>
+                </button>
+                <button class="carousel-control-next" type="button" data-bs-target="#propertyCarousel" data-bs-slide="next">
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Next</span>
+                </button>
+                {% endif %}
+            </div>
+            {% else %}
+            <div class="rounded mb-4 w-100 d-flex align-items-center justify-content-center"
+                 style="height:280px;background:linear-gradient(135deg,#f5e6d0,#e8cfa8);">
+                <div class="text-center">
+                  {% if property.type == 'Villa' %}<i class="fas fa-home fa-5x mb-2" style="color:#b5935a;"></i>
+                  {% elif property.type == 'Apartment' %}<i class="fas fa-building fa-5x mb-2" style="color:#b5935a;"></i>
+                  {% elif property.type == 'Townhouse' %}<i class="fas fa-city fa-5x mb-2" style="color:#b5935a;"></i>
+                  {% elif property.type == 'Land' %}<i class="fas fa-mountain fa-5x mb-2" style="color:#b5935a;"></i>
+                  {% else %}<i class="fas fa-key fa-5x mb-2" style="color:#b5935a;"></i>{% endif %}
+                  <p class="fw-semibold mt-2" style="color:#b5935a;">{{ property.type }}</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Badges -->
+            <div class="mb-2">
+              {% if property.is_surooh %}
+              <span class="badge" style="background:linear-gradient(135deg,#6a0080,#9c27b0);font-size:.8rem;padding:6px 12px;">🏛️ Surooh Government Project</span>
+              {% elif property.is_omran %}
+              <span class="badge" style="background:linear-gradient(135deg,#1565c0,#1976d2);font-size:.8rem;padding:6px 12px;">🏢 OMRAN Group Project</span>
+              {% else %}
+              <span class="badge" style="background:#b5935a;font-size:.8rem;padding:6px 12px;">{{ property.type }}</span>
+              {% endif %}
+            </div>
+            <h2>{{ property.title }}</h2>
+            <h4 class="fw-bold mb-3" style="color:#b5935a;">OMR {{ "{:,.0f}".format(property.price) }}</h4>
+            <p class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>{{ property.location }}
+              {% if property.type %} &nbsp;·&nbsp; {{ property.type }}{% endif %}
+              {% if property.size %} &nbsp;·&nbsp; {{ property.size|int }} sqm{% endif %}
+            </p>
+            <hr>
+            <h5>Description</h5>
+            <p>{{ property.description }}</p>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 sticky-top" style="top: 100px;">
+                <div class="card-body">
+                    <h5 class="card-title">Contact Agent</h5>
+                    <p><strong>Agent:</strong> {{ property.agent.username }}</p>
+                    <p><strong>Email:</strong> {{ property.agent.email }}</p>
+                    <div id="inquiry-form-container">
+                        <div class="mb-3">
+                            <textarea id="inquiry-message" class="form-control" rows="3"
+                                placeholder="I'm interested in this property..."></textarea>
+                        </div>
+                        <button id="send-inquiry-btn" class="btn btn-primary w-100" onclick="sendInquiry('{{ property.agent_id }}', '{{ property.id }}')">Send Inquiry</button>
+                        <div id="inquiry-status" class="mt-2 text-center small"></div>
+                    </div>
+                    <hr>
+                    <button id="fav-btn-{{ property.id }}" class="btn btn-outline-danger w-100 mb-2" onclick="toggleFav('{{ property.id }}')">
+                        <i class="far fa-heart"></i> Save to Favorites
+                    </button>
+                    {% if current_user.is_authenticated and (current_user.id == property.agent_id or current_user.role == 'admin') %}
+                    <form action="{{ url_for('main.delete_property', property_id=property.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this property?');">
+                        <button type="submit" class="btn btn-danger w-100">
+                            <i class="fas fa-trash"></i> Delete Property
+                        </button>
+                    </form>
+                    {% endif %}
+                    
+                    <script>
+                        function sendInquiry(agentId, propertyId) {
+                            const message = document.getElementById('inquiry-message').value.trim();
+                            const statusDiv = document.getElementById('inquiry-status');
+                            if (!message) {
+                                statusDiv.innerHTML = '<span class="text-danger">⚠️ Please write a message</span>';
+                                return;
+                            }
+                            const btn = document.getElementById('send-inquiry-btn');
+                            btn.disabled = true;
+                            
+                            fetch('/api/send_message', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ agent_id: agentId, property_id: propertyId, message: message })
+                            })
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data.status === 'sent') {
+                                    statusDiv.innerHTML = '<span class="text-success">✅ Message sent! Check your dashboard.</span>';
+                                    document.getElementById('inquiry-message').value = '';
+                                } else {
+                                    statusDiv.innerHTML = '<span class="text-danger">❌ Failed to send</span>';
+                                    btn.disabled = false;
+                                }
+                            })
+                            .catch(err => {
+                                statusDiv.innerHTML = '<span class="text-danger">❌ You need to be logged in</span>';
+                                btn.disabled = false;
+                            });
+                        }
+
+                        function toggleFav(propertyId) {
+                            fetch(`/favorite/${propertyId}`, { method: 'POST' })
+                            .then(r => r.json())
+                            .then(data => {
+                                const btn = document.getElementById(`fav-btn-${propertyId}`);
+                                if (data.status === 'added') {
+                                    btn.innerHTML = '<i class="fas fa-heart text-danger"></i> Saved to Favorites';
+                                } else if (data.status === 'removed') {
+                                    btn.innerHTML = '<i class="far fa-heart"></i> Save to Favorites';
+                                } else if (data.error === 'unauthorized') {
+                                    alert('Please log in to save properties.');
+                                }
+                            });
+                        }
+                    </script>
+                </div>
+            </div>
+
+            <div class="mt-4">
+                <h5>AI Investment Score</h5>
+                <div class="card border-0 shadow-sm p-3" style="background:linear-gradient(135deg,#fffdf7,#f5e6d0);">
+                  <div class="d-flex align-items-center gap-3">
+                    <div style="font-size:2rem;">🤖</div>
+                    <div>
+                      <div class="fw-bold" style="color:#1c0d00;">
+                        {% set score = (property.price / 2500)|int %}
+                        {% set score = [score, 95]|min %}
+                        {% set score = [score, 40]|max %}
+                        {{ score }} / 100
+                      </div>
+                      <div class="small text-muted">
+                        {% if property.is_omran %}OMRAN premium development — strong coastal/urban demand
+                        {% elif property.is_surooh %}Surooh government project — stable, official housing
+                        {% else %}AI-scored based on type, location & price{% endif %}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
