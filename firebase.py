@@ -1,14 +1,23 @@
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-cred = credentials.Certificate("smartestate-e98d5-firebase-adminsdk-fbsvc-e7676180b2.json")
-# Prevent multiple app initializations if imported multiple times
-if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred)
+import os
 
-db = firestore.client()
+json_path = "smartestate-e98d5-firebase-adminsdk-fbsvc-e7676180b2.json"
+db = None
+
+if os.path.exists(json_path):
+    cred = credentials.Certificate(json_path)
+    # Prevent multiple app initializations if imported multiple times
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred)
+    db = firestore.client()
+else:
+    print(f"⚠️ Warning: Firebase certificate {json_path} not found. Firebase features will be disabled.")
 
 def init_firebase_agents(firestore_db):
+    if not firestore_db:
+        return
     agents_to_add = ['surooh', 'omran', 'binthani', 'alhabeeb']
     agents_ref = firestore_db.collection('agents')
     
