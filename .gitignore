@@ -2,7 +2,7 @@
 __pycache__/
 *.pyc
 .env
-instance/
+# instance/
 .DS_Store
 static/uploads/properties/*
 !static/uploads/properties/.gitkeep
