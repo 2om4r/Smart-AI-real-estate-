@@ -22,12 +22,20 @@ with app.app_context():
         db.session.add(agent)
         print("Agent user created.")
     
-    # Create Customer User
-    if not User.query.filter_by(email='customer@gmail.com').first():
-        customer = User(username='customer_jane', email='customer@gmail.com', role='customer')
-        customer.set_password('customer123')
-        db.session.add(customer)
-        print("Customer user created.")
+    # Create Specific Agents
+    specific_agents = ['surooh', 'omran', 'binthani', 'alhabeeb']
+    for agent_name in specific_agents:
+        email = f"{agent_name}@gmail.com"
+        user_by_email = User.query.filter_by(email=email).first()
+        user_by_name = User.query.filter_by(username=agent_name).first()
+        
+        if not user_by_email and not user_by_name:
+            new_agent = User(username=agent_name, email=email, role='agent')
+            new_agent.set_password('password123')
+            db.session.add(new_agent)
+            print(f"Agent {agent_name} created.")
+        else:
+            print(f"Agent {agent_name} already exists.")
     
     db.session.commit()
 
