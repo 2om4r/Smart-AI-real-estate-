@@ -3,7 +3,7 @@ from flask_login import login_user, current_user, logout_user, login_required
 from extensions import db
 from models import User, Property, Favorite, Area, PropertyImage, Message, Inquiry, RecentlyViewed, Notification
 from forms import RegistrationForm, LoginForm, PropertyForm, SettingsProfileForm, SettingsSecurityForm, SettingsPreferencesForm
-from ai_utils import get_ai_response,recommend_investment, portfolio_summary, calculate_score
+from ai_utils import get_ai_response, recommend_investment, portfolio_summary, calculate_score, calculate_roi_full, normalize_city, get_growth_rate
 import os
 from werkzeug.utils import secure_filename
 from ml_model import train_price_model, predict_price, get_ml_investment_score
@@ -12,8 +12,12 @@ from firebase import db as firebase_db
 # ✅ Blueprint
 main = Blueprint('main', __name__)
 
+# =============================================================================
+# 🤖 API الشات بوت — Ahmed 2.0 Chatbot API
+# =============================================================================
 @main.route("/api/chat", methods=["POST"])
 def chat_api():
+    """Ahmed 2.0 — intent-driven, data-aware chatbot endpoint."""
     data = request.get_json()
     message = data.get("message", "")
 
@@ -24,18 +28,75 @@ def chat_api():
     try:
         reply = get_ai_response(message, user_id=user_id)
         return jsonify(reply)
-
     except Exception as e:
-        print("ERROR:", str(e))
+        print(f"[CHAT API ERROR]: {e}")
         return jsonify({
+            "success": False,
             "text": "Sorry, server error 😅" if "english" in message.lower() else "صار خطأ في السيرفر",
             "properties": []
-        })
+        }), 500
 
 
-# =====================================================
-# 🗺️ INVESTMENT MAP API
-# =====================================================
+# =============================================================================
+# 🗺️ خريطة الاستثمار — INVESTMENT MAP APIs
+# =============================================================================
+
+# ── GeoJSON endpoint للخريطة الحرارية — GeoJSON for auto-updating heatmap ──
+@main.route("/api/properties/geojson")
+def api_properties_geojson():
+    """Return all properties with coordinates as a GeoJSON FeatureCollection."""
+    try:
+        props = Property.query.filter(
+            Property.latitude.isnot(None),
+            Property.longitude.isnot(None)
+        ).all()
+
+        features = []
+        for p in props:
+            city_key = normalize_city(p.city or p.location or '')
+            roi_data = calculate_roi_full(float(p.price or 0), city_key, p.type)
+
+            # صورة العقار — Property image
+            main_img = None
+            for img in p.images:
+                if img.is_main:
+                    main_img = img.image_filename
+                    break
+            if not main_img and p.images:
+                main_img = p.images[0].image_filename
+            image_url = f'/static/uploads/properties/{main_img}' if main_img else None
+
+            agent_name = p.agent.username if p.agent else "Unknown"
+
+            features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [p.longitude, p.latitude]
+                },
+                "properties": {
+                    "id": p.id,
+                    "title": p.title,
+                    "type": p.type or "Unknown",
+                    "city": p.city or p.location or "",
+                    "price": p.price,
+                    "agent_name": agent_name,
+                    "image_url": image_url,
+                    "roi": roi_data['roi'],
+                    "growth_rate": roi_data['growth_rate'],
+                    "value_5y": roi_data['value_5y'],
+                    "url": f"/property/{p.id}",
+                    "bedrooms": p.bedrooms,
+                    "bathrooms": p.bathrooms,
+                    "is_surooh": p.is_surooh,
+                    "is_omran": p.is_omran,
+                }
+            })
+
+        return jsonify({"type": "FeatureCollection", "features": features})
+    except Exception as e:
+        print(f"[GEOJSON ERROR]: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @main.route("/api/areas")
 def api_areas():
