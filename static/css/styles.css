@@ -22,6 +22,25 @@
     --shadow-warm-lg: rgba(62, 39, 35, 0.14);
 }
 
+/* ---------- Dark Mode Overrides ---------- */
+[data-bs-theme="dark"] {
+    --cream-bg: #0f172a;
+    --cream-light: #1e293b;
+    --cream-card: #1e293b;
+    --cream-warm: #334155;
+    --cream-border: #475569;
+    --brown-dark: #020617;
+    --brown-medium: #0f172a;
+    --brown-light: #1e293b;
+    --brown-soft: #334155;
+    /* Keeping gold accents the same for elegance */
+    --text-dark: #f8fafc;
+    --text-medium: #cbd5e1;
+    --text-muted: #94a3b8;
+    --shadow-warm: rgba(0, 0, 0, 0.5);
+    --shadow-warm-lg: rgba(0, 0, 0, 0.7);
+}
+
 /* ---------- Global Styles ---------- */
 * {
     font-family: 'Outfit', sans-serif;

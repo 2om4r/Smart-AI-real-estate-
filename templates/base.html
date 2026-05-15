@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ current_lang }}" dir="{{ 'rtl' if current_lang == 'ar' else 'ltr' }}" data-bs-theme="{{ current_theme }}">
 
 <head>
     <meta charset="UTF-8">
@@ -26,31 +26,64 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.home') }}">Home</a>
+                        <a class="nav-link" href="{{ url_for('main.home') }}"><i class="fas fa-home"></i> {{ _('home') }}</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.about') }}">About</a>
+                        <a class="nav-link" href="{{ url_for('main.about') }}"><i class="fas fa-info-circle"></i> {{ _('about') }}</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('main.investment_map') }}">
-                            <i class="fas fa-map-marked-alt me-1"></i>Investment Map
+                            <i class="fas fa-map-marked-alt"></i> {{ _('investment_map') }}
                         </a>
                     </li>
                     {% if current_user.is_authenticated %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.dashboard') }}">Dashboard</a>
+                        <a class="nav-link" href="{{ url_for('main.dashboard') }}"><i class="fas fa-tachometer-alt"></i> {{ _('dashboard') }}</a>
                     </li>
+                    {% if current_user.role == 'agent' %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.logout') }}">Logout</a>
+                        <a class="nav-link" href="{{ url_for('main.new_property') }}"><i class="fas fa-plus-circle"></i> {{ _('add_property') }}</a>
+                    </li>
+                    {% endif %}
+                    {% endif %}
+                </ul>
+                <ul class="navbar-nav ms-auto align-items-center">
+                    <!-- Language Toggle -->
+                    <li class="nav-item me-2">
+                        {% if current_lang == 'en' %}
+                        <a class="nav-link btn btn-sm btn-outline-light rounded-pill px-3" href="{{ url_for('main.set_language', lang='ar') }}">عربي</a>
+                        {% else %}
+                        <a class="nav-link btn btn-sm btn-outline-light rounded-pill px-3" href="{{ url_for('main.set_language', lang='en') }}">EN</a>
+                        {% endif %}
+                    </li>
+                    <!-- Theme Toggle -->
+                    <li class="nav-item me-3">
+                        {% if current_theme == 'light' %}
+                        <a class="nav-link" href="{{ url_for('main.set_theme', theme='dark') }}" title="Dark Mode"><i class="fas fa-moon"></i></a>
+                        {% else %}
+                        <a class="nav-link" href="{{ url_for('main.set_theme', theme='light') }}" title="Light Mode"><i class="fas fa-sun text-warning"></i></a>
+                        {% endif %}
+                    </li>
+
+                    {% if current_user.is_authenticated %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user-circle"></i> {{ current_user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('main.settings') }}"><i class="fas fa-cog"></i> {{ _('settings') }}</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('main.logout') }}"><i class="fas fa-sign-out-alt"></i> {{ _('logout') }}</a></li>
+                        </ul>
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.login') }}">Login</a>
+                        <a class="nav-link" href="{{ url_for('main.login') }}"><i class="fas fa-sign-in-alt"></i> {{ _('login') }}</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link btn btn-primary ms-2" href="{{ url_for('main.register') }}">Register</a>
+                        <a class="nav-link btn btn-primary ms-2" href="{{ url_for('main.register') }}">{{ _('register') }}</a>
                     </li>
                     {% endif %}
                 </ul>

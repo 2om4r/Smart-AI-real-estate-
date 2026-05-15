@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="fw-bold"><i class="fas fa-cog"></i> {{ _('settings') }}</h2>
+            <p class="text-muted">Manage your account settings and preferences.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-3">
+            <!-- Settings Tabs -->
+            <div class="nav flex-column nav-pills custom-pills" id="v-pills-tab" role="tablist" aria-orientation="vertical">
+                <button class="nav-link active text-start mb-2" id="v-pills-profile-tab" data-bs-toggle="pill" data-bs-target="#v-pills-profile" type="button" role="tab" aria-controls="v-pills-profile" aria-selected="true">
+                    <i class="fas fa-user me-2"></i> {{ _('profile') }}
+                </button>
+                <button class="nav-link text-start mb-2" id="v-pills-security-tab" data-bs-toggle="pill" data-bs-target="#v-pills-security" type="button" role="tab" aria-controls="v-pills-security" aria-selected="false">
+                    <i class="fas fa-shield-alt me-2"></i> {{ _('security') }}
+                </button>
+                <button class="nav-link text-start" id="v-pills-preferences-tab" data-bs-toggle="pill" data-bs-target="#v-pills-preferences" type="button" role="tab" aria-controls="v-pills-preferences" aria-selected="false">
+                    <i class="fas fa-sliders-h me-2"></i> {{ _('preferences') }}
+                </button>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="tab-content" id="v-pills-tabContent">
+                
+                <!-- Profile Tab -->
+                <div class="tab-pane fade show active" id="v-pills-profile" role="tabpanel" aria-labelledby="v-pills-profile-tab">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-4">
+                            <h4 class="mb-4">{{ _('profile') }}</h4>
+                            <form method="POST" action="{{ url_for('main.settings') }}" enctype="multipart/form-data">
+                                {{ profile_form.hidden_tag() }}
+                                
+                                <div class="row mb-4 align-items-center">
+                                    <div class="col-auto">
+                                        {% if current_user.profile_image %}
+                                        <img src="{{ url_for('static', filename='uploads/profiles/' + current_user.profile_image) }}" alt="Profile Image" class="rounded-circle" style="width: 100px; height: 100px; object-fit: cover;">
+                                        {% else %}
+                                        <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center" style="width: 100px; height: 100px; font-size: 2rem;">
+                                            {{ current_user.username[0]|upper }}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col">
+                                        {{ profile_form.profile_image.label(class="form-label fw-semibold") }}
+                                        {{ profile_form.profile_image(class="form-control") }}
+                                        <div class="form-text">JPG, PNG or JPEG. Max size 5MB.</div>
+                                    </div>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-semibold">{{ _('email') }}</label>
+                                    <input type="text" class="form-control text-muted" value="{{ current_user.email }}" disabled>
+                                    <div class="form-text">Email address cannot be changed.</div>
+                                </div>
+
+                                <div class="mb-3">
+                                    {{ profile_form.full_name.label(class="form-label fw-semibold") }}
+                                    {{ profile_form.full_name(class="form-control", placeholder="Enter your full name") }}
+                                </div>
+
+                                <div class="mb-4">
+                                    {{ profile_form.phone.label(class="form-label fw-semibold") }}
+                                    {{ profile_form.phone(class="form-control", placeholder="+968 1234 5678") }}
+                                </div>
+
+                                {{ profile_form.submit_profile(class="btn btn-primary") }}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Tab -->
+                <div class="tab-pane fade" id="v-pills-security" role="tabpanel" aria-labelledby="v-pills-security-tab">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-4">
+                            <h4 class="mb-4">{{ _('security') }}</h4>
+                            <form method="POST" action="{{ url_for('main.settings') }}">
+                                {{ security_form.hidden_tag() }}
+                                
+                                <div class="mb-3">
+                                    {{ security_form.current_password.label(class="form-label fw-semibold") }}
+                                    {{ security_form.current_password(class="form-control") }}
+                                    {% if security_form.current_password.errors %}
+                                        <div class="text-danger small mt-1">{% for error in security_form.current_password.errors %}{{ error }}{% endfor %}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="mb-3">
+                                    {{ security_form.new_password.label(class="form-label fw-semibold") }}
+                                    {{ security_form.new_password(class="form-control") }}
+                                    {% if security_form.new_password.errors %}
+                                        <div class="text-danger small mt-1">{% for error in security_form.new_password.errors %}{{ error }}{% endfor %}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="mb-4">
+                                    {{ security_form.confirm_password.label(class="form-label fw-semibold") }}
+                                    {{ security_form.confirm_password(class="form-control") }}
+                                    {% if security_form.confirm_password.errors %}
+                                        <div class="text-danger small mt-1">{% for error in security_form.confirm_password.errors %}{{ error }}{% endfor %}</div>
+                                    {% endif %}
+                                </div>
+
+                                {{ security_form.submit_security(class="btn btn-primary") }}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Preferences Tab -->
+                <div class="tab-pane fade" id="v-pills-preferences" role="tabpanel" aria-labelledby="v-pills-preferences-tab">
+                    <div class="card shadow-sm border-0">
+                        <div class="card-body p-4">
+                            <h4 class="mb-4">{{ _('preferences') }}</h4>
+                            <form method="POST" action="{{ url_for('main.settings') }}">
+                                {{ preferences_form.hidden_tag() }}
+                                
+                                <div class="mb-3">
+                                    {{ preferences_form.preferred_language.label(class="form-label fw-semibold") }}
+                                    {{ preferences_form.preferred_language(class="form-select") }}
+                                </div>
+
+                                <div class="mb-4">
+                                    {{ preferences_form.theme_mode.label(class="form-label fw-semibold") }}
+                                    {{ preferences_form.theme_mode(class="form-select") }}
+                                </div>
+
+                                {{ preferences_form.submit_preferences(class="btn btn-primary") }}
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Custom Pills Styling */
+.custom-pills .nav-link {
+    color: var(--bs-body-color);
+    border-radius: 8px;
+    padding: 12px 20px;
+    transition: all 0.2s ease;
+}
+.custom-pills .nav-link:hover {
+    background-color: var(--bs-secondary-bg);
+}
+.custom-pills .nav-link.active {
+    background-color: var(--bs-primary);
+    color: white;
+}
+</style>
+{% endblock %}

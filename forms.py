@@ -35,6 +35,12 @@ class PropertyForm(FlaskForm):
     location = StringField('Location', validators=[DataRequired()])
     type = SelectField('Type', choices=[('Villa', 'Villa'), ('Apartment', 'Apartment'), ('Land', 'Land'), ('Commercial', 'Commercial')], validators=[DataRequired()])
     size = FloatField('Size (sqm)', validators=[DataRequired()])
+    bedrooms = FloatField('Bedrooms')
+    bathrooms = FloatField('Bathrooms')
+    city = StringField('City')
+    address = StringField('Address')
+    latitude = FloatField('Latitude')
+    longitude = FloatField('Longitude')
     images = MultipleFileField('Property Images', validators=[FileAllowed(['jpg', 'png', 'jpeg'])])
     submit = SubmitField('Post Property')
 
@@ -44,3 +50,20 @@ class SearchForm(FlaskForm):
     min_price = FloatField('Min Price')
     max_price = FloatField('Max Price')
     submit = SubmitField('Search')
+
+class SettingsProfileForm(FlaskForm):
+    full_name = StringField('Full Name', validators=[Length(max=100)])
+    phone = StringField('Phone Number', validators=[Length(max=20)])
+    profile_image = FileField('Profile Image', validators=[FileAllowed(['jpg', 'png', 'jpeg'])])
+    submit_profile = SubmitField('Save Profile')
+
+class SettingsSecurityForm(FlaskForm):
+    current_password = PasswordField('Current Password', validators=[DataRequired()])
+    new_password = PasswordField('New Password', validators=[DataRequired(), Length(min=6)])
+    confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('new_password')])
+    submit_security = SubmitField('Update Password')
+
+class SettingsPreferencesForm(FlaskForm):
+    preferred_language = SelectField('Language', choices=[('en', 'English'), ('ar', 'Arabic')])
+    theme_mode = SelectField('Theme', choices=[('light', 'Light Mode'), ('dark', 'Dark Mode')])
+    submit_preferences = SubmitField('Save Preferences')

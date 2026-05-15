@@ -134,7 +134,7 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     // =========================
-    // 🚀 إرسال رسالة
+    // 🚀 sendMessage
     // =========================
     function sendMessage() {
         const message = chatInput.value.trim();
@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // =========================
 
     // =========================
-    // Load user favorite IDs (for heart state)
+    // Load user favorite IDs 
     // =========================
     fetch('/api/favorites', {credentials: 'same-origin'})
     .then(r => {

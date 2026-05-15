@@ -13,6 +13,11 @@ class User(db.Model, UserMixin):
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(128))
     role = db.Column(db.String(20), nullable=False, default='customer') # customer, agent, admin
+    full_name = db.Column(db.String(100))
+    phone = db.Column(db.String(20))
+    profile_image = db.Column(db.String(100), default='default.jpg')
+    preferred_language = db.Column(db.String(2), default='en')
+    theme_mode = db.Column(db.String(10), default='light')
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
     # Relationships
@@ -37,6 +42,10 @@ class Property(db.Model):
     location = db.Column(db.String(100), nullable=False)
     type = db.Column(db.String(50), nullable=False) # Villa, Apartment, etc.
     size = db.Column(db.Float) # Size in sq meters/feet
+    bedrooms = db.Column(db.Integer)
+    bathrooms = db.Column(db.Integer)
+    city = db.Column(db.String(100))
+    address = db.Column(db.String(200))
     agent_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     is_surooh = db.Column(db.Boolean, default=False, nullable=False)  # Surooh project flag
@@ -90,6 +99,10 @@ class Property(db.Model):
             'location': self.location,
             'type': self.type,
             'size': self.size,
+            'bedrooms': self.bedrooms,
+            'bathrooms': self.bathrooms,
+            'city': self.city or self.location,
+            'address': self.address,
             'lat': self.latitude,
             'lng': self.longitude,
             'is_surooh': self.is_surooh,
@@ -99,7 +112,6 @@ class Property(db.Model):
             'image_url': f'/static/uploads/properties/{main_img}' if main_img else None,
             # Surooh specific
             'region': self.region,
-            'city': self.location,
             'total_units': self.total_units or 0,
             'villas': self.villas or 0,
             'apartments': self.apartments or 0,

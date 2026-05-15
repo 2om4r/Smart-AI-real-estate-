@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, url_for, flash, redirect, request,
 from flask_login import login_user, current_user, logout_user, login_required
 from extensions import db
 from models import User, Property, Favorite, Area, PropertyImage, Message, Inquiry, RecentlyViewed, Notification
-from forms import RegistrationForm, LoginForm, PropertyForm
+from forms import RegistrationForm, LoginForm, PropertyForm, SettingsProfileForm, SettingsSecurityForm, SettingsPreferencesForm
 from ai_utils import get_ai_response,recommend_investment, portfolio_summary, calculate_score
 import os
 from werkzeug.utils import secure_filename
@@ -142,6 +142,85 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('main.home'))
+
+# =====================================================
+# ⚙️ Settings
+# =====================================================
+@main.route("/settings", methods=['GET', 'POST'])
+@login_required
+def settings():
+    profile_form = SettingsProfileForm()
+    security_form = SettingsSecurityForm()
+    preferences_form = SettingsPreferencesForm()
+
+    if request.method == 'POST':
+        if 'submit_profile' in request.form and profile_form.validate_on_submit():
+            current_user.full_name = profile_form.full_name.data
+            current_user.phone = profile_form.phone.data
+            # Handle profile image upload
+            if profile_form.profile_image.data:
+                img = profile_form.profile_image.data
+                ext = img.filename.rsplit('.', 1)[-1].lower()
+                filename = f"user_{current_user.id}_{uuid.uuid4().hex[:8]}.{ext}"
+                upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'profiles')
+                os.makedirs(upload_dir, exist_ok=True)
+                img.save(os.path.join(upload_dir, filename))
+                current_user.profile_image = filename
+            db.session.commit()
+            flash('Profile updated successfully!', 'success')
+            return redirect(url_for('main.settings'))
+
+        elif 'submit_security' in request.form and security_form.validate_on_submit():
+            if current_user.check_password(security_form.current_password.data):
+                current_user.set_password(security_form.new_password.data)
+                db.session.commit()
+                flash('Password updated successfully!', 'success')
+            else:
+                flash('Incorrect current password.', 'danger')
+            return redirect(url_for('main.settings'))
+
+        elif 'submit_preferences' in request.form and preferences_form.validate_on_submit():
+            current_user.preferred_language = preferences_form.preferred_language.data
+            current_user.theme_mode = preferences_form.theme_mode.data
+            db.session.commit()
+            flash('Preferences updated successfully!', 'success')
+            return redirect(url_for('main.settings'))
+
+    # Pre-populate forms
+    if request.method == 'GET':
+        profile_form.full_name.data = current_user.full_name
+        profile_form.phone.data = current_user.phone
+        preferences_form.preferred_language.data = current_user.preferred_language or 'en'
+        preferences_form.theme_mode.data = current_user.theme_mode or 'light'
+
+    return render_template('settings.html', 
+                           title='Settings',
+                           profile_form=profile_form,
+                           security_form=security_form,
+                           preferences_form=preferences_form)
+
+@main.route("/set_language/<lang>")
+def set_language(lang):
+    if lang in ['en', 'ar']:
+        if current_user.is_authenticated:
+            current_user.preferred_language = lang
+            db.session.commit()
+        else:
+            from flask import session
+            session['language'] = lang
+    return redirect(request.referrer or url_for('main.home'))
+
+@main.route("/set_theme/<theme>")
+def set_theme(theme):
+    if theme in ['light', 'dark']:
+        if current_user.is_authenticated:
+            current_user.theme_mode = theme
+            db.session.commit()
+        else:
+            from flask import session
+            session['theme'] = theme
+    return redirect(request.referrer or url_for('main.home'))
+
 
 
 # =====================================================
@@ -391,6 +470,12 @@ def new_property():
             location=form.location.data,
             type=form.type.data,
             size=form.size.data,
+            bedrooms=form.bedrooms.data,
+            bathrooms=form.bathrooms.data,
+            city=form.city.data,
+            address=form.address.data,
+            latitude=form.latitude.data,
+            longitude=form.longitude.data,
             is_surooh=is_surooh,
             is_omran=is_omran,
             agent_id=current_user.id
@@ -425,6 +510,69 @@ def new_property():
         return redirect(url_for('main.dashboard'))
 
     return render_template('create_property.html', form=form)
+
+@main.route("/property/<int:property_id>/edit", methods=['GET', 'POST'])
+@login_required
+def edit_property(property_id):
+    prop = Property.query.get_or_404(property_id)
+    if prop.agent_id != current_user.id and current_user.role != 'admin':
+        flash('You are not authorized to edit this property.', 'danger')
+        return redirect(url_for('main.dashboard'))
+        
+    form = PropertyForm()
+    if form.validate_on_submit():
+        prop.title = form.title.data
+        prop.description = form.description.data
+        prop.price = form.price.data
+        prop.location = form.location.data
+        prop.type = form.type.data
+        prop.size = form.size.data
+        prop.bedrooms = form.bedrooms.data
+        prop.bathrooms = form.bathrooms.data
+        prop.city = form.city.data
+        prop.address = form.address.data
+        prop.latitude = form.latitude.data
+        prop.longitude = form.longitude.data
+        
+        # Handle file uploads if new images are provided
+        images = request.files.getlist(form.images.name)
+        if images and images[0].filename:
+            upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'properties')
+            os.makedirs(upload_dir, exist_ok=True)
+            for img in images:
+                if img and img.filename:
+                    ext = img.filename.rsplit('.', 1)[-1].lower()
+                    unique_filename = f"{uuid.uuid4().hex}.{ext}"
+                    filepath = os.path.join(upload_dir, unique_filename)
+                    img.save(filepath)
+                    # For simplicity, make the first new image the main one if no images exist
+                    is_main = len(prop.images) == 0
+                    new_img = PropertyImage(
+                        image_filename=unique_filename,
+                        is_main=is_main,
+                        property_id=prop.id
+                    )
+                    db.session.add(new_img)
+                    
+        db.session.commit()
+        flash('Property updated successfully!', 'success')
+        return redirect(url_for('main.property_detail', property_id=prop.id))
+        
+    elif request.method == 'GET':
+        form.title.data = prop.title
+        form.description.data = prop.description
+        form.price.data = prop.price
+        form.location.data = prop.location
+        form.type.data = prop.type
+        form.size.data = prop.size
+        form.bedrooms.data = prop.bedrooms
+        form.bathrooms.data = prop.bathrooms
+        form.city.data = prop.city
+        form.address.data = prop.address
+        form.latitude.data = prop.latitude
+        form.longitude.data = prop.longitude
+        
+    return render_template('edit_property.html', form=form, property=prop)
 
 
 

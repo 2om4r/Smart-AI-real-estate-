@@ -8,14 +8,18 @@
     <div class="col-md-10">
         <div class="card shadow-sm border-0 mb-5">
             <div class="card-body p-5">
-                <h3 class="mb-4"><i class="fas fa-plus-circle text-primary"></i> {{ _('post_property') }}</h3>
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h3 class="mb-0"><i class="fas fa-edit text-primary"></i> {{ _('edit_property') }}</h3>
+                    <a href="{{ url_for('main.property_detail', property_id=property.id) }}" class="btn btn-outline-secondary btn-sm">{{ _('view_details') }}</a>
+                </div>
+                
                 <form method="POST" action="" enctype="multipart/form-data">
                     {{ form.hidden_tag() }}
                     
                     <div class="row">
                         <div class="col-md-8 mb-3">
                             {{ form.title.label(class="form-label fw-bold") }}
-                            {{ form.title(class="form-control", placeholder=_('title')) }}
+                            {{ form.title(class="form-control") }}
                         </div>
                         <div class="col-md-4 mb-3">
                             {{ form.type.label(class="form-label fw-bold") }}
@@ -25,48 +29,48 @@
 
                     <div class="mb-3">
                         {{ form.description.label(class="form-label fw-bold") }}
-                        {{ form.description(class="form-control", rows=4, placeholder=_('description')) }}
+                        {{ form.description(class="form-control", rows=4) }}
                     </div>
 
                     <div class="row">
                         <div class="col-md-3 mb-3">
                             {{ form.price.label(class="form-label fw-bold") }}
-                            {{ form.price(class="form-control", placeholder=_('price')) }}
+                            {{ form.price(class="form-control") }}
                         </div>
                         <div class="col-md-3 mb-3">
                             {{ form.size.label(class="form-label fw-bold") }}
-                            {{ form.size(class="form-control", placeholder=_('area')) }}
+                            {{ form.size(class="form-control") }}
                         </div>
                         <div class="col-md-3 mb-3">
                             {{ form.bedrooms.label(class="form-label fw-bold") }}
-                            {{ form.bedrooms(class="form-control", placeholder="e.g. 3") }}
+                            {{ form.bedrooms(class="form-control") }}
                         </div>
                         <div class="col-md-3 mb-3">
                             {{ form.bathrooms.label(class="form-label fw-bold") }}
-                            {{ form.bathrooms(class="form-control", placeholder="e.g. 2") }}
+                            {{ form.bathrooms(class="form-control") }}
                         </div>
                     </div>
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             {{ form.city.label(class="form-label fw-bold") }}
-                            {{ form.city(class="form-control", placeholder=_('city')) }}
+                            {{ form.city(class="form-control") }}
                         </div>
                         <div class="col-md-6 mb-3">
                             {{ form.address.label(class="form-label fw-bold") }}
-                            {{ form.address(class="form-control", placeholder=_('address')) }}
+                            {{ form.address(class="form-control") }}
                         </div>
                         <div class="col-md-12 mb-3">
                             <label class="form-label fw-bold">{{ _('location') }} (Legacy)</label>
-                            {{ form.location(class="form-control", placeholder="e.g. Muscat, Al Mouj") }}
+                            {{ form.location(class="form-control") }}
                         </div>
                     </div>
 
                     <!-- Map Integration -->
                     <div class="mb-4">
-                        <label class="form-label fw-bold"><i class="fas fa-map-marker-alt text-danger"></i> Pin Location on Map</label>
+                        <label class="form-label fw-bold"><i class="fas fa-map-marker-alt text-danger"></i> Location Map</label>
                         <div id="propertyMap" style="height: 300px; border-radius: 8px; border: 1px solid #dee2e6;"></div>
-                        <div class="form-text mt-2">Click on the map to place a pin for the exact location.</div>
+                        <div class="form-text mt-2">Click on the map to update the property location.</div>
                     </div>
                     
                     <!-- Hidden fields for coordinates -->
@@ -76,13 +80,24 @@
                     </div>
 
                     <div class="mb-4">
-                        {{ form.images.label(class="form-label fw-bold") }}
-                        {{ form.images(class="form-control") }}
-                        <div class="form-text">Upload multiple images. First image will be the cover.</div>
+                        <label class="form-label fw-bold">Current Images</label>
+                        <div class="d-flex gap-2 overflow-auto py-2">
+                            {% for img in property.images %}
+                            <img src="{{ url_for('static', filename='uploads/properties/' + img.image_filename) }}" alt="Property Image" class="rounded" style="height: 100px; width: 150px; object-fit: cover;">
+                            {% else %}
+                            <p class="text-muted small">No images uploaded.</p>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="mt-3">
+                            {{ form.images.label(class="form-label fw-bold") }} Add More Images
+                            {{ form.images(class="form-control") }}
+                            <div class="form-text">Uploading new images will add them to the property.</div>
+                        </div>
                     </div>
 
                     <div class="d-grid mt-4">
-                        {{ form.submit(class="btn btn-primary btn-lg fw-bold") }}
+                        {{ form.submit(class="btn btn-primary btn-lg fw-bold", value=_("save_changes")) }}
                     </div>
                 </form>
             </div>
@@ -94,11 +109,14 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Default to Muscat, Oman
-    var defaultLat = 23.5880;
-    var defaultLng = 58.3829;
+    var latInput = document.getElementById('lat_input');
+    var lngInput = document.getElementById('lng_input');
     
-    var map = L.map('propertyMap').setView([defaultLat, defaultLng], 10);
+    // Default to Muscat if no coordinates are set
+    var lat = latInput.value ? parseFloat(latInput.value) : 23.5880;
+    var lng = lngInput.value ? parseFloat(lngInput.value) : 58.3829;
+    
+    var map = L.map('propertyMap').setView([lat, lng], latInput.value ? 14 : 10);
     
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
@@ -106,21 +124,14 @@ document.addEventListener('DOMContentLoaded', function() {
     
     var marker = null;
     
-    // Inputs
-    var latInput = document.getElementById('lat_input');
-    var lngInput = document.getElementById('lng_input');
-    
-    // If we have existing coordinates (e.g. validation error re-render)
+    // If we have existing coordinates
     if(latInput.value && lngInput.value) {
-        var lat = parseFloat(latInput.value);
-        var lng = parseFloat(lngInput.value);
         marker = L.marker([lat, lng]).addTo(map);
-        map.setView([lat, lng], 13);
     }
     
     map.on('click', function(e) {
-        var lat = e.latlng.lat;
-        var lng = e.latlng.lng;
+        var clickedLat = e.latlng.lat;
+        var clickedLng = e.latlng.lng;
         
         if (marker) {
             marker.setLatLng(e.latlng);
@@ -128,8 +139,8 @@ document.addEventListener('DOMContentLoaded', function() {
             marker = L.marker(e.latlng).addTo(map);
         }
         
-        latInput.value = lat.toFixed(6);
-        lngInput.value = lng.toFixed(6);
+        latInput.value = clickedLat.toFixed(6);
+        lngInput.value = clickedLng.toFixed(6);
     });
 });
 </script>
