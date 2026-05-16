@@ -3,7 +3,7 @@ from firebase_admin import credentials, firestore
 
 import os
 
-json_path = "smartestate-e98d5-firebase-adminsdk-fbsvc-e7676180b2.json"
+json_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), "instance", "smartestate-e98d5-firebase-adminsdk-fbsvc-e7676180b2.json")
 db = None
 
 if os.path.exists(json_path):

@@ -1,8 +1,5 @@
 {
   "en": {
-    "home": "Home",
-    "about": "About",
-    "investment_map": "Investment Map",
     "dashboard": "Dashboard",
     "properties": "Properties",
     "add_property": "Add Property",
@@ -61,9 +58,6 @@
     "remove_from_favorites": "Remove from Favorites"
   },
   "ar": {
-    "home": "الرئيسية",
-    "about": "حول",
-    "investment_map": "خريطة الاستثمار",
     "dashboard": "لوحة القيادة",
     "properties": "العقارات",
     "add_property": "إضافة عقار",

@@ -7,7 +7,6 @@ load_dotenv()
 from flask import Flask, url_for, session, request
 from flask_login import current_user
 import json
-import os
 from config import Config
 from extensions import db, migrate, login_manager
 from routes import main

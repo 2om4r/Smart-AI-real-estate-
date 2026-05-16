@@ -9,7 +9,7 @@
         <div class="card shadow-sm border-0 mb-5">
             <div class="card-body p-5">
                 <h3 class="mb-4"><i class="fas fa-plus-circle text-primary"></i> {{ _('post_property') }}</h3>
-                <form method="POST" action="" enctype="multipart/form-data" id="propertyForm">
+                <form method="POST" action="" enctype="multipart/form-data">
                     {{ form.hidden_tag() }}
                     
                     <div class="row">
@@ -57,37 +57,22 @@
                             {{ form.address(class="form-control", placeholder=_('address')) }}
                         </div>
                         <div class="col-md-12 mb-3">
-                            <label class="form-label fw-bold">{{ _('location') }}</label>
+                            <label class="form-label fw-bold">{{ _('location') }} (Legacy)</label>
                             {{ form.location(class="form-control", placeholder="e.g. Muscat, Al Mouj") }}
                         </div>
                     </div>
 
-                    <!-- خريطة تحديد الموقع — Interactive Map Picker -->
-                    <div class="mb-3">
+                    <!-- Map Integration -->
+                    <div class="mb-4">
                         <label class="form-label fw-bold"><i class="fas fa-map-marker-alt text-danger"></i> Pin Location on Map</label>
-                        <div id="propertyMap" style="height: 350px; border-radius: 10px; border: 2px solid var(--cream-border);"></div>
+                        <div id="propertyMap" style="height: 300px; border-radius: 8px; border: 1px solid #dee2e6;"></div>
+                        <div class="form-text mt-2">Click on the map to place a pin for the exact location.</div>
                     </div>
-
-                    <!-- إحداثيات مقروءة — Coordinate display -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold small text-muted">Selected Coordinates</label>
-                        <input type="text" class="form-control form-control-sm" id="coord_display" readonly
-                               placeholder="Click the map to select a location" style="max-width:350px;">
-                    </div>
-
-                    <!-- حقول مخفية للإحداثيات — Hidden fields for coordinates -->
+                    
+                    <!-- Hidden fields for coordinates -->
                     <div class="d-none">
                         {{ form.latitude(id="lat_input") }}
                         {{ form.longitude(id="lng_input") }}
-                    </div>
-
-                    <!-- رسالة خطأ التحقق — Validation error message -->
-                    <div class="alert alert-danger d-none mb-3" id="mapError">
-                        {% if current_lang == 'ar' %}
-                        يرجى تحديد موقع العقار على الخريطة 📍
-                        {% else %}
-                        Please pin the property location on the map 📍
-                        {% endif %}
                     </div>
 
                     <div class="mb-4">
@@ -109,66 +94,42 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // ── مركز عمان الافتراضي — Default center: Oman ──
-    var map = L.map('propertyMap').setView([21.5, 55.9], 7);
-
+    // Default to Muscat, Oman
+    var defaultLat = 23.5880;
+    var defaultLng = 58.3829;
+    
+    var map = L.map('propertyMap').setView([defaultLat, defaultLng], 10);
+    
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
-
+    
     var marker = null;
+    
+    // Inputs
     var latInput = document.getElementById('lat_input');
     var lngInput = document.getElementById('lng_input');
-    var coordDisplay = document.getElementById('coord_display');
-    var mapError = document.getElementById('mapError');
-
-    // ── إذا كانت هناك إحداثيات موجودة — If coordinates exist (re-render after validation) ──
-    if (latInput.value && lngInput.value) {
+    
+    // If we have existing coordinates (e.g. validation error re-render)
+    if(latInput.value && lngInput.value) {
         var lat = parseFloat(latInput.value);
         var lng = parseFloat(lngInput.value);
-        marker = L.marker([lat, lng], {draggable: true}).addTo(map);
+        marker = L.marker([lat, lng]).addTo(map);
         map.setView([lat, lng], 13);
-        coordDisplay.value = lat.toFixed(6) + ', ' + lng.toFixed(6);
-        bindMarkerDrag(marker);
     }
-
-    // ── نقر على الخريطة — Map click handler ──
+    
     map.on('click', function(e) {
         var lat = e.latlng.lat;
         var lng = e.latlng.lng;
-
+        
         if (marker) {
             marker.setLatLng(e.latlng);
         } else {
-            marker = L.marker(e.latlng, {draggable: true}).addTo(map);
-            bindMarkerDrag(marker);
+            marker = L.marker(e.latlng).addTo(map);
         }
-
-        updateCoords(lat, lng);
-        mapError.classList.add('d-none');
-    });
-
-    // ── سحب العلامة — Marker drag handler ──
-    function bindMarkerDrag(m) {
-        m.on('dragend', function(e) {
-            var pos = e.target.getLatLng();
-            updateCoords(pos.lat, pos.lng);
-        });
-    }
-
-    function updateCoords(lat, lng) {
+        
         latInput.value = lat.toFixed(6);
         lngInput.value = lng.toFixed(6);
-        coordDisplay.value = lat.toFixed(6) + ', ' + lng.toFixed(6);
-    }
-
-    // ── التحقق عند الإرسال — Form submit validation ──
-    document.getElementById('propertyForm').addEventListener('submit', function(e) {
-        if (!latInput.value || !lngInput.value) {
-            e.preventDefault();
-            mapError.classList.remove('d-none');
-            document.getElementById('propertyMap').scrollIntoView({behavior: 'smooth'});
-        }
     });
 });
 </script>

@@ -1,23 +1,19 @@
-from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, current_app
+from flask import Blueprint, render_template, url_for, flash, redirect, request, jsonify, current_app, session
 from flask_login import login_user, current_user, logout_user, login_required
 from extensions import db
 from models import User, Property, Favorite, Area, PropertyImage, Message, Inquiry, RecentlyViewed, Notification
 from forms import RegistrationForm, LoginForm, PropertyForm, SettingsProfileForm, SettingsSecurityForm, SettingsPreferencesForm
-from ai_utils import get_ai_response, recommend_investment, portfolio_summary, calculate_score, calculate_roi_full, normalize_city, get_growth_rate
+from ai_utils import get_ai_response, recommend_investment, portfolio_summary, calculate_score, get_roi_assumption
 import os
-from werkzeug.utils import secure_filename
-from ml_model import train_price_model, predict_price, get_ml_investment_score
+import uuid
+from ml_model import train_price_model, predict_price, predict_prices, get_ml_investment_score
 from firebase import db as firebase_db
 
 # ✅ Blueprint
 main = Blueprint('main', __name__)
 
-# =============================================================================
-# 🤖 API الشات بوت — Ahmed 2.0 Chatbot API
-# =============================================================================
 @main.route("/api/chat", methods=["POST"])
 def chat_api():
-    """Ahmed 2.0 — intent-driven, data-aware chatbot endpoint."""
     data = request.get_json()
     message = data.get("message", "")
 
@@ -28,75 +24,18 @@ def chat_api():
     try:
         reply = get_ai_response(message, user_id=user_id)
         return jsonify(reply)
+
     except Exception as e:
-        print(f"[CHAT API ERROR]: {e}")
+        print("ERROR:", str(e))
         return jsonify({
-            "success": False,
             "text": "Sorry, server error 😅" if "english" in message.lower() else "صار خطأ في السيرفر",
             "properties": []
-        }), 500
+        })
 
 
-# =============================================================================
-# 🗺️ خريطة الاستثمار — INVESTMENT MAP APIs
-# =============================================================================
-
-# ── GeoJSON endpoint للخريطة الحرارية — GeoJSON for auto-updating heatmap ──
-@main.route("/api/properties/geojson")
-def api_properties_geojson():
-    """Return all properties with coordinates as a GeoJSON FeatureCollection."""
-    try:
-        props = Property.query.filter(
-            Property.latitude.isnot(None),
-            Property.longitude.isnot(None)
-        ).all()
-
-        features = []
-        for p in props:
-            city_key = normalize_city(p.city or p.location or '')
-            roi_data = calculate_roi_full(float(p.price or 0), city_key, p.type)
-
-            # صورة العقار — Property image
-            main_img = None
-            for img in p.images:
-                if img.is_main:
-                    main_img = img.image_filename
-                    break
-            if not main_img and p.images:
-                main_img = p.images[0].image_filename
-            image_url = f'/static/uploads/properties/{main_img}' if main_img else None
-
-            agent_name = p.agent.username if p.agent else "Unknown"
-
-            features.append({
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [p.longitude, p.latitude]
-                },
-                "properties": {
-                    "id": p.id,
-                    "title": p.title,
-                    "type": p.type or "Unknown",
-                    "city": p.city or p.location or "",
-                    "price": p.price,
-                    "agent_name": agent_name,
-                    "image_url": image_url,
-                    "roi": roi_data['roi'],
-                    "growth_rate": roi_data['growth_rate'],
-                    "value_5y": roi_data['value_5y'],
-                    "url": f"/property/{p.id}",
-                    "bedrooms": p.bedrooms,
-                    "bathrooms": p.bathrooms,
-                    "is_surooh": p.is_surooh,
-                    "is_omran": p.is_omran,
-                }
-            })
-
-        return jsonify({"type": "FeatureCollection", "features": features})
-    except Exception as e:
-        print(f"[GEOJSON ERROR]: {e}")
-        return jsonify({"error": str(e)}), 500
+# =====================================================
+# 🗺️ INVESTMENT MAP API
+# =====================================================
 
 @main.route("/api/areas")
 def api_areas():
@@ -267,7 +206,6 @@ def set_language(lang):
             current_user.preferred_language = lang
             db.session.commit()
         else:
-            from flask import session
             session['language'] = lang
     return redirect(request.referrer or url_for('main.home'))
 
@@ -278,7 +216,6 @@ def set_theme(theme):
             current_user.theme_mode = theme
             db.session.commit()
         else:
-            from flask import session
             session['theme'] = theme
     return redirect(request.referrer or url_for('main.home'))
 
@@ -298,9 +235,6 @@ def delete_property(property_id):
         return redirect(url_for('main.dashboard'))
         
     try:
-        import os
-        from flask import current_app
-        
         # Clean up physical image files
         upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'properties')
         for img in prop.images:
@@ -312,7 +246,6 @@ def delete_property(property_id):
                     pass
                     
         # Manually delete dependent records that don't have cascade setup
-        from models import RecentlyViewed, Message
         RecentlyViewed.query.filter_by(property_id=prop.id).delete()
         Message.query.filter_by(property_id=prop.id).update({'property_id': None})
         
@@ -385,16 +318,16 @@ def dashboard():
 
         if properties:
             train_price_model(properties)
-
-        for p in properties:
-            p.score = calculate_score({
-                'type': p.type,
-                'price': p.price,
-                'location': p.location
-            })
-
-            p.predicted_price = predict_price(p)
-            p.ml_score = get_ml_investment_score(p.predicted_price, p.price)
+            
+            predictions = predict_prices(properties)
+            for i, p in enumerate(properties):
+                p.score = calculate_score({
+                    'type': p.type,
+                    'price': p.price,
+                    'location': p.location
+                })
+                p.predicted_price = predictions[i]
+                p.ml_score = get_ml_investment_score(p.predicted_price, p.price)
 
         return render_template('dashboard_admin.html',
                                users=users,
@@ -511,10 +444,6 @@ def reply_message():
 # =====================================================
 # ➕ Add Property
 # =====================================================
-import os
-import uuid
-from werkzeug.utils import secure_filename
-from flask import current_app, request
 
 @main.route("/property/new", methods=['GET', 'POST'])
 @login_required
@@ -687,10 +616,8 @@ def search():
     if sort_by == 'cheapest':
         results.sort(key=lambda x: (x.price or float('inf')))
     elif sort_by == 'highest_roi':
-        from ai_utils import get_roi_assumption
         results.sort(key=lambda x: get_roi_assumption(x.type or 'Unknown'), reverse=True)
     elif sort_by == 'best_investment':
-        from ai_utils import calculate_score
         prices = [float(p.price) for p in results if p.price]
         avg = sum(prices)/len(prices) if prices else 100000
         results.sort(key=lambda x: calculate_score({'price': x.price, 'type': x.type, 'location': x.location}, avg), reverse=True)
@@ -873,3 +800,86 @@ def api_recommendations():
 
     scored.sort(key=lambda x: x["score"], reverse=True)
     return jsonify(scored[:6])
+
+# =====================================================
+# ✉️ Agent Messages
+# =====================================================
+@main.route("/agent/messages")
+@login_required
+def agent_messages_inbox():
+    if current_user.role != 'agent':
+        return redirect(url_for('main.dashboard'))
+    
+    # get threads like in dashboard
+    all_agent_msgs = Message.query.filter(
+        (Message.sender_id == current_user.id) | (Message.receiver_id == current_user.id)
+    ).order_by(Message.timestamp.asc()).all()
+
+    agent_threads = {}
+    for m in all_agent_msgs:
+        other_id = m.receiver_id if m.sender_id == current_user.id else m.sender_id
+        if other_id == current_user.id: continue
+        if other_id not in agent_threads:
+            other_user = User.query.get(other_id)
+            agent_threads[other_id] = {
+                'user': other_user,
+                'messages': [],
+                'last_msg': None,
+                'unread': 0
+            }
+        agent_threads[other_id]['messages'].append(m)
+
+    for uid, thread in agent_threads.items():
+        thread['last_msg'] = thread['messages'][-1]
+        thread['unread'] = sum(1 for m in thread['messages'] if not m.is_read and m.receiver_id == current_user.id)
+
+    agent_threads_list = sorted(agent_threads.values(), key=lambda t: t['last_msg'].timestamp, reverse=True)
+
+    return render_template('dashboard_messages.html', 
+                           threads=agent_threads_list, 
+                           active_thread_id=None)
+
+@main.route("/agent/messages/<int:customer_id>")
+@login_required
+def agent_message_thread(customer_id):
+    if current_user.role != 'agent':
+        return redirect(url_for('main.dashboard'))
+    
+    all_agent_msgs = Message.query.filter(
+        (Message.sender_id == current_user.id) | (Message.receiver_id == current_user.id)
+    ).order_by(Message.timestamp.asc()).all()
+
+    agent_threads = {}
+    for m in all_agent_msgs:
+        other_id = m.receiver_id if m.sender_id == current_user.id else m.sender_id
+        if other_id == current_user.id: continue
+        if other_id not in agent_threads:
+            other_user = User.query.get(other_id)
+            agent_threads[other_id] = {
+                'user': other_user,
+                'messages': [],
+                'last_msg': None,
+                'unread': 0
+            }
+        agent_threads[other_id]['messages'].append(m)
+        
+        # Mark as read if active
+        if other_id == customer_id and m.receiver_id == current_user.id and not m.is_read:
+            m.is_read = True
+
+    db.session.commit()
+
+    for uid, thread in agent_threads.items():
+        thread['last_msg'] = thread['messages'][-1]
+        thread['unread'] = sum(1 for m in thread['messages'] if not m.is_read and m.receiver_id == current_user.id)
+
+    agent_threads_list = sorted(agent_threads.values(), key=lambda t: t['last_msg'].timestamp, reverse=True)
+    
+    active_customer = User.query.get_or_404(customer_id)
+    thread_msgs = agent_threads.get(customer_id, {}).get('messages', [])
+
+    return render_template('dashboard_messages.html', 
+                           threads=agent_threads_list,
+                           active_thread_id=customer_id,
+                           active_customer=active_customer,
+                           thread_msgs=thread_msgs)

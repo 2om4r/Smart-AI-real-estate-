@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 from extensions import db, login_manager
@@ -69,7 +69,6 @@ class Property(db.Model):
     @property
     def is_new(self):
         """Property is 'new' if created within last 30 days."""
-        from datetime import timedelta
         return (datetime.utcnow() - self.created_at) < timedelta(days=30)
 
     # Relationships

@@ -16,7 +16,7 @@ trained = False
 
 def train_price_model(properties):
     global trained
-    if not properties:
+    if trained or not properties:
         return
 
     # Extract data
@@ -63,6 +63,30 @@ def predict_price(p):
     
     X_transformed = preprocessor.transform(df)
     return float(model.predict(X_transformed)[0])
+
+def predict_prices(properties):
+    if not trained or not properties:
+        return [getattr(p, 'price', 0) for p in properties]
+    
+    data = []
+    for p in properties:
+        ptype = p.type if hasattr(p, 'type') else p.get('type', 'Unknown')
+        ploc = p.location if hasattr(p, 'location') else p.get('location', 'Unknown')
+        psur = p.is_surooh if hasattr(p, 'is_surooh') else p.get('is_surooh', False)
+        pomr = p.is_omran if hasattr(p, 'is_omran') else p.get('is_omran', False)
+        psize = p.size if hasattr(p, 'size') else p.get('size', 0)
+        data.append({
+            'type': ptype or 'Unknown',
+            'location': ploc or 'Unknown',
+            'is_surooh': 1 if psur else 0,
+            'is_omran': 1 if pomr else 0,
+            'size': psize if psize else 0
+        })
+        
+    df = pd.DataFrame(data)
+    X_transformed = preprocessor.transform(df)
+    predictions = model.predict(X_transformed)
+    return [float(pred) for pred in predictions]
 
 def predict_future_price(p, years=5):
     current_predicted = predict_price(p)

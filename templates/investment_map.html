@@ -127,14 +127,9 @@
     </h1>
     <p class="text-muted small mb-0">Oman's investment zones · Surooh government projects · OMRAN Group developments</p>
   </div>
-  <div class="d-flex gap-2">
-    <button class="btn btn-outline-success btn-sm" id="refreshBtn" onclick="window._refreshGeoJSON && window._refreshGeoJSON()">
-      <i class="fas fa-sync-alt me-1"></i>Refresh
-    </button>
-    <a href="{{ url_for('main.home') }}" class="btn btn-outline-secondary btn-sm">
-      <i class="fas fa-arrow-left me-1"></i>Back
-    </a>
-  </div>
+  <a href="{{ url_for('main.home') }}" class="btn btn-outline-secondary btn-sm">
+    <i class="fas fa-arrow-left me-1"></i>Back
+  </a>
 </div>
 
 <div class="map-page-wrapper">
@@ -427,76 +422,6 @@
   }).catch(()=>{
     document.getElementById('zone-count').textContent='Failed to load data';
   });
-
-  // =================================================================
-  // 🏠 GeoJSON Property Layer — طبقة العقارات من قاعدة البيانات
-  // =================================================================
-  let geoCluster = L.markerClusterGroup({disableClusteringAtZoom:14});
-  let geoHeat = null;
-  map.addLayer(geoCluster);
-
-  function makePropertyPopup(p) {
-    const img = p.image_url ? `<img src="${p.image_url}" class="popup-img" alt="${p.title}">` : '';
-    return `<div class="inv-popup">
-      ${img}
-      <h3>${p.title}</h3>
-      <div class="stat-row"><span>🏙️ City</span><span class="stat-val">${p.city}</span></div>
-      <div class="stat-row"><span>🏠 Type</span><span class="stat-val">${p.type}</span></div>
-      <div class="stat-row"><span>💰 Price</span><span class="stat-val">OMR ${(p.price||0).toLocaleString()}</span></div>
-      <div class="stat-row"><span>🎯 ROI</span><span class="stat-val">${p.roi}%</span></div>
-      <div class="stat-row"><span>📅 Value 5y</span><span class="stat-val">OMR ${(p.value_5y||0).toLocaleString()}</span></div>
-      <div class="stat-row"><span>👤 Agent</span><span class="stat-val">${p.agent_name}</span></div>
-      <a href="${p.url}" class="btn btn-primary btn-sm w-100 mt-2">View Details</a>
-    </div>`;
-  }
-
-  function loadGeoJSON() {
-    fetch('/api/properties/geojson')
-      .then(r => r.json())
-      .then(geojson => {
-        geoCluster.clearLayers();
-        if (geoHeat) { map.removeLayer(geoHeat); geoHeat = null; }
-
-        let heatPts = [];
-        (geojson.features || []).forEach(f => {
-          const coords = f.geometry.coordinates; // [lng, lat]
-          const p = f.properties;
-          const lat = coords[1], lng = coords[0];
-
-          // Marker with popup matching existing style
-          const m = L.circleMarker([lat, lng], {
-            radius: 6, color: '#b5935a', fillColor: '#e8bc70',
-            fillOpacity: 0.85, weight: 1.5
-          }).bindPopup(makePropertyPopup(p), {maxWidth: 300});
-          geoCluster.addLayer(m);
-
-          // Heatmap point weighted by ROI
-          heatPts.push([lat, lng, (p.roi || 10) / 20]);
-        });
-
-        // ROI-weighted heat layer (shown alongside markers)
-        if (heatPts.length > 0) {
-          geoHeat = L.heatLayer(heatPts, {
-            radius: 30, blur: 20, maxZoom: 13, max: 1.0,
-            gradient: {0.2:'blue', 0.4:'cyan', 0.6:'lime', 0.8:'yellow', 1.0:'red'}
-          }).addTo(map);
-        }
-      })
-      .catch(err => console.error('GeoJSON load error:', err));
-  }
-
-  // ── تحميل أولي + تحديث تلقائي — Initial load + auto-refresh every 30s ──
-  loadGeoJSON();
-  setInterval(loadGeoJSON, 30000);
-
-  // ── زر التحديث — Expose refresh for the button ──
-  window._refreshGeoJSON = function() {
-    const btn = document.getElementById('refreshBtn');
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Loading...';
-    loadGeoJSON();
-    setTimeout(() => { btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Refresh'; }, 1000);
-  };
-
 })();
 </script>
 
