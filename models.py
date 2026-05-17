@@ -182,12 +182,54 @@ class Area(db.Model):
     def __repr__(self):
         return f"Area('{self.name}', score={self.score:.1f})"
 
+# ─── Conversation ─────────────────────────────────────────────────────────────
+# نموذج المحادثة: يجمع عدة رسائل تحت محادثة واحدة لحفظ السياق
+class Conversation(db.Model):
+    id         = db.Column(db.Integer, primary_key=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)   # null = anonymous
+    started_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    ended_at   = db.Column(db.DateTime, nullable=True)
+    language   = db.Column(db.String(5), default='en')  # 'en' or 'ar'
+    logs       = db.relationship('ChatLog', backref='conversation', lazy=True,
+                                 cascade='all, delete-orphan')
+
+    def __repr__(self):
+        return f"Conversation(id={self.id}, user_id={self.user_id})"
+
+
+# ─── ChatLog ──────────────────────────────────────────────────────────────────
+# سجل كل رسالة في المحادثة مع تفاصيل الأداء
 class ChatLog(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    user_message = db.Column(db.Text, nullable=False)
-    bot_response = db.Column(db.Text, nullable=False)
-    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True) # Can be anonymous
+    id              = db.Column(db.Integer, primary_key=True)
+    conversation_id = db.Column(db.Integer, db.ForeignKey('conversation.id'), nullable=True)
+    user_id         = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    user_message    = db.Column(db.Text, nullable=False)
+    bot_response    = db.Column(db.Text, nullable=False)
+    intent          = db.Column(db.String(50), nullable=True)   # search, investment, compare, etc.
+    language        = db.Column(db.String(5), default='en')     # 'en' or 'ar'
+    tokens_used     = db.Column(db.Integer, nullable=True)      # GPT tokens consumed
+    response_time   = db.Column(db.Float, nullable=True)        # seconds to respond
+    timestamp       = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # Relationship to feedback (one log → one optional feedback)
+    feedback        = db.relationship('ChatFeedback', backref='chat_log', uselist=False,
+                                      cascade='all, delete-orphan')
+
+    def __repr__(self):
+        return f"ChatLog(id={self.id}, intent='{self.intent}', tokens={self.tokens_used})"
+
+
+# ─── ChatFeedback ──────────────────────────────────────────────────────────────
+# تقييم المستخدم لكل رسالة (إيجابي / سلبي + تعليق اختياري)
+class ChatFeedback(db.Model):
+    id          = db.Column(db.Integer, primary_key=True)
+    chat_log_id = db.Column(db.Integer, db.ForeignKey('chat_log.id'), nullable=False)
+    rating      = db.Column(db.Integer, nullable=False)          # 1 = 👍, 0 = 👎
+    comment     = db.Column(db.Text, nullable=True)
+    timestamp   = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"ChatFeedback(log_id={self.chat_log_id}, rating={self.rating})"
 
 class Message(db.Model):
     id = db.Column(db.Integer, primary_key=True)
