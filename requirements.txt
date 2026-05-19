@@ -12,3 +12,4 @@ python-dotenv
 flask-migrate
 flask-wtf
 email-validator
+Flask-Limiter

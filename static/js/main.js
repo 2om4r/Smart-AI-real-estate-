@@ -156,15 +156,31 @@ document.addEventListener('DOMContentLoaded', function () {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'same-origin',
-            body: JSON.stringify({ message: message })
+            body: JSON.stringify({ 
+                message: message, 
+                conversation_id: window._currentConversationId || null 
+            })
         })
-        .then(response => response.json())
+        .then(response => {
+            if (response.status === 429) {
+                const ti = document.getElementById('typing-indicator');
+                if (ti) ti.remove();
+                addMessage("⚠️ Too many messages — please wait a minute.", false);
+                throw new Error('rate_limited');
+            }
+            return response.json();
+        })
         .then(data => {
             // Remove typing indicator
             const ti = document.getElementById('typing-indicator');
             if (ti) ti.remove();
 
             console.log("Response:", data);
+
+            // Save conversation_id for memory
+            if (data.conversation_id) {
+                window._currentConversationId = data.conversation_id;
+            }
 
             // Handle action-only responses (favorite/contact)
             if (data.action) {
@@ -241,6 +257,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         })
         .catch(error => {
+            if (error.message === 'rate_limited') return;
             const ti = document.getElementById('typing-indicator');
             if (ti) ti.remove();
             console.error('Error:', error);

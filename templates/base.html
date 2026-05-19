@@ -28,23 +28,23 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.home') }}"><i class="fas fa-home"></i> {{ _('home') }}</a>
+                        <a class="nav-link fw-semibold" href="{{ url_for('main.home') }}"><i class="fas fa-home"></i> {{ _('home') | replace('_', ' ') | title }}</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.about') }}"><i class="fas fa-info-circle"></i> {{ _('about') }}</a>
+                        <a class="nav-link fw-semibold" href="{{ url_for('main.about') }}"><i class="fas fa-info-circle"></i> {{ _('about') | replace('_', ' ') | title }}</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.investment_map') }}">
-                            <i class="fas fa-map-marked-alt"></i> {{ _('investment_map') }}
+                        <a class="nav-link fw-semibold" href="{{ url_for('main.investment_map') }}">
+                            <i class="fas fa-map-marked-alt"></i> {{ _('investment map') | title }}
                         </a>
                     </li>
                     {% if current_user.is_authenticated %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.dashboard') }}"><i class="fas fa-tachometer-alt"></i> {{ _('dashboard') }}</a>
+                        <a class="nav-link fw-semibold" href="{{ url_for('main.dashboard') }}"><i class="fas fa-tachometer-alt"></i> {{ _('dashboard') | replace('_', ' ') | title }}</a>
                     </li>
                     {% if current_user.role == 'agent' %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.new_property') }}"><i class="fas fa-plus-circle"></i> {{ _('add_property') }}</a>
+                        <a class="nav-link fw-semibold" href="{{ url_for('main.new_property') }}"><i class="fas fa-plus-circle"></i> {{ _('add property') | title }}</a>
                     </li>
                     {% endif %}
                     {% endif %}
@@ -69,21 +69,21 @@
 
                     {% if current_user.is_authenticated %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle fw-semibold" href="#" id="navbarDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-user-circle"></i> {{ current_user.username }}
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="navbarDropdown">
-                            <li><a class="dropdown-item" href="{{ url_for('main.settings') }}"><i class="fas fa-cog"></i> {{ _('settings') }}</a></li>
+                        <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0" aria-labelledby="navbarDropdown">
+                            <li><a class="dropdown-item" href="{{ url_for('main.settings') }}"><i class="fas fa-cog"></i> {{ _('settings') | replace('_', ' ') | title }}</a></li>
                             <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item text-danger" href="{{ url_for('main.logout') }}"><i class="fas fa-sign-out-alt"></i> {{ _('logout') }}</a></li>
+                            <li><a class="dropdown-item text-danger" href="{{ url_for('main.logout') }}"><i class="fas fa-sign-out-alt"></i> {{ _('logout') | replace('_', ' ') | title }}</a></li>
                         </ul>
                     </li>
                     {% else %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('main.login') }}"><i class="fas fa-sign-in-alt"></i> {{ _('login') }}</a>
+                        <a class="nav-link fw-semibold" href="{{ url_for('main.login') }}"><i class="fas fa-sign-in-alt"></i> {{ _('login') | replace('_', ' ') | title }}</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link btn btn-primary ms-2" href="{{ url_for('main.register') }}">{{ _('register') }}</a>
+                        <a class="nav-link btn btn-primary ms-2 fw-semibold" href="{{ url_for('main.register') }}">{{ _('register') | replace('_', ' ') | title }}</a>
                     </li>
                     {% endif %}
                 </ul>

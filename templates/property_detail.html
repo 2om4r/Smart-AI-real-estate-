@@ -55,6 +55,10 @@
             </div>
             <h2>{{ property.title }}</h2>
             <h4 class="fw-bold mb-3" style="color:#b5935a;">OMR {{ "{:,.0f}".format(property.price) }}</h4>
+            <div class="d-flex gap-2 mb-3">
+                <button class="btn btn-outline-secondary btn-sm" onclick="window.print()"><i class="fas fa-print"></i> Print</button>
+                <button class="btn btn-outline-secondary btn-sm" onclick="navigator.clipboard.writeText(window.location.href); alert('Link copied to clipboard!');"><i class="fas fa-share-alt"></i> Share</button>
+            </div>
             <p class="text-muted"><i class="fas fa-map-marker-alt me-1"></i>{{ property.location }}
               {% if property.type %} &nbsp;·&nbsp; {{ property.type }}{% endif %}
               {% if property.size %} &nbsp;·&nbsp; {{ property.size|int }} sqm{% endif %}
@@ -62,6 +66,26 @@
             <hr>
             <h5>Description</h5>
             <p>{{ property.description }}</p>
+
+            <!-- Mini Map -->
+            <div class="mt-4 mb-4">
+                <h5>Location Map</h5>
+                <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+                <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                <div id="property-map" style="height: 250px; border-radius: 10px; z-index: 1; border: 1px solid #ddd;"></div>
+                <script>
+                    document.addEventListener('DOMContentLoaded', function() {
+                        var lat = {{ property.latitude | default(23.5859) }};
+                        var lng = {{ property.longitude | default(58.4059) }};
+                        var map = L.map('property-map').setView([lat, lng], 13);
+                        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                            attribution: '&copy; OpenStreetMap &copy; CARTO'
+                        }).addTo(map);
+                        L.marker([lat, lng]).addTo(map)
+                            .bindPopup("<b>{{ property.title }}</b><br>{{ property.location }}").openPopup();
+                    });
+                </script>
+            </div>
         </div>
         <div class="col-md-4">
             <div class="card shadow-sm border-0 sticky-top" style="top: 100px;">

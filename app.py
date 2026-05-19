@@ -8,7 +8,7 @@ from flask import Flask, url_for, session, request
 from flask_login import current_user
 import json
 from config import Config
-from extensions import db, migrate, login_manager
+from extensions import db, migrate, login_manager, limiter
 from routes import main
 
 def create_app(config_class=Config):
@@ -19,6 +19,7 @@ def create_app(config_class=Config):
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    limiter.init_app(app)
 
     # Register blueprints
     app.register_blueprint(main)

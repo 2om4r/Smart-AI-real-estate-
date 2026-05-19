@@ -7,3 +7,6 @@ instance/
 static/uploads/properties/*
 !static/uploads/properties/.gitkeep
 smartestate-e98d5-firebase-adminsdk-fbsvc-e7676180b2.json
+
+.claude/
+static/uploads/profiles/

@@ -1,6 +1,8 @@
 # ai_utils.py — Ahmed 2.0: AI Real Estate Assistant for Oman
 # المساعد الذكي "أحمد 2.0" — تحليل النوايا، البحث العقاري، الاستثمار، الذاكرة المحادثاتية
 
+from __future__ import annotations
+
 import os
 import json
 import re
@@ -328,9 +330,28 @@ def get_ai_response(prompt: str,
 
     query = Property.query
 
+    # Detect Surooh / OMRAN project requests (these use boolean flags, not location)
     loc = extracted_data.get("location", "")
+    is_project_query = False
     if loc and loc.strip() and loc.lower() not in ("none", "null"):
-        query = query.filter(Property.location.ilike(f"%{loc}%"))
+        loc_lower = loc.lower()
+        if "surooh" in loc_lower or "سروح" in loc_lower:
+            query = query.filter_by(is_surooh=True)
+            is_project_query = True
+        elif "omran" in loc_lower or "عمران" in loc_lower:
+            query = query.filter_by(is_omran=True)
+            is_project_query = True
+        else:
+            query = query.filter(Property.location.ilike(f"%{loc}%"))
+
+    # Also check the raw prompt for project keywords (user may not put it in "location")
+    if not is_project_query:
+        if "surooh" in msg_lower or "سروح" in msg_lower:
+            query = query.filter_by(is_surooh=True)
+            is_project_query = True
+        elif "omran" in msg_lower or "عمران" in msg_lower:
+            query = query.filter_by(is_omran=True)
+            is_project_query = True
 
     ptype = extracted_data.get("property_type", "")
     if ptype and ptype.lower() not in ("none", "null", "any"):

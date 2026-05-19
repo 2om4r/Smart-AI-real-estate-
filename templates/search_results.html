@@ -9,7 +9,7 @@
                 All Properties
             {% endif %}
         </h2>
-        <span class="badge bg-secondary fs-6">{{ properties|length }} found</span>
+        <span class="badge bg-secondary fs-6">{{ total_results|default(properties|length) }} properties found</span>
     </div>
 
     <!-- Refine search bar -->
@@ -133,5 +133,27 @@
         </div>
         {% endfor %}
     </div>
+
+    <!-- Pagination -->
+    {% if total_pages and total_pages > 1 %}
+    <nav aria-label="Search results pages" class="mt-4">
+        <ul class="pagination justify-content-center">
+            <li class="page-item {% if page <= 1 %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('main.search', page=page-1, location=request.args.get('location',''), type=request.args.get('type',''), price_min=request.args.get('price_min',''), price_max=request.args.get('price_max',''), sort=request.args.get('sort',''), surooh_only=request.args.get('surooh_only',''), omran_only=request.args.get('omran_only','')) }}">Previous</a>
+            </li>
+            
+            {% for p in range(1, total_pages + 1) %}
+            <li class="page-item {% if page == p %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('main.search', page=p, location=request.args.get('location',''), type=request.args.get('type',''), price_min=request.args.get('price_min',''), price_max=request.args.get('price_max',''), sort=request.args.get('sort',''), surooh_only=request.args.get('surooh_only',''), omran_only=request.args.get('omran_only','')) }}">{{ p }}</a>
+            </li>
+            {% endfor %}
+            
+            <li class="page-item {% if page >= total_pages %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('main.search', page=page+1, location=request.args.get('location',''), type=request.args.get('type',''), price_min=request.args.get('price_min',''), price_max=request.args.get('price_max',''), sort=request.args.get('sort',''), surooh_only=request.args.get('surooh_only',''), omran_only=request.args.get('omran_only','')) }}">Next</a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+
 </div>
 {% endblock %}

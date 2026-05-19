@@ -582,9 +582,11 @@ def reply_message():
     msg = Message(sender_id=current_user.id, receiver_id=receiver_id, content=content)
     db.session.add(msg)
 
+    # Dynamic notification based on role
+    role_name = "المشرف" if current_user.role == 'admin' else "الوكيل" if current_user.role == 'agent' else "العميل"
     notif = Notification(
         user_id=receiver_id,
-        message=f"لديك رسالة جديدة من الوكيل {current_user.username}"
+        message=f"لديك رسالة جديدة من {role_name} {current_user.username}"
     )
     db.session.add(notif)
     db.session.commit()
@@ -597,8 +599,37 @@ def reply_message():
         "timestamp": msg.timestamp.strftime("%H:%M")
     })
 
-
 # =====================================================
+# 🛡️ Admin Management API
+# =====================================================
+
+@main.route("/admin/delete_user/<int:user_id>", methods=["POST"])
+@login_required
+def admin_delete_user(user_id):
+    if current_user.role != 'admin':
+        abort(403)
+    user_to_delete = User.query.get_or_404(user_id)
+    if user_to_delete.id == current_user.id:
+        flash("You cannot delete yourself.", "danger")
+        return redirect(url_for('main.dashboard'))
+    
+    db.session.delete(user_to_delete)
+    db.session.commit()
+    flash(f"User {user_to_delete.username} deleted successfully.", "success")
+    return redirect(url_for('main.dashboard'))
+
+@main.route("/admin/edit_role/<int:user_id>", methods=["POST"])
+@login_required
+def admin_edit_role(user_id):
+    if current_user.role != 'admin':
+        abort(403)
+    user = User.query.get_or_404(user_id)
+    new_role = request.form.get('role')
+    if new_role in ['customer', 'agent', 'admin']:
+        user.role = new_role
+        db.session.commit()
+        flash(f"Role updated successfully for {user.username}.", "success")
+    return redirect(url_for('main.dashboard'))# =====================================================
 # ➕ Add / Edit Property
 # =====================================================
 
@@ -771,8 +802,20 @@ def search():
             ), reverse=True
         )
 
+    # Manual Pagination
+    page = request.args.get('page', 1, type=int)
+    per_page = 12
+    total = len(results)
+    total_pages = (total + per_page - 1) // per_page
+    start_idx = (page - 1) * per_page
+    end_idx = start_idx + per_page
+    paginated_results = results[start_idx:end_idx]
+
     return render_template('search_results.html',
-                           properties=results,
+                           properties=paginated_results,
+                           page=page,
+                           total_pages=total_pages,
+                           total_results=total,
                            surooh_only=surooh_only,
                            omran_only=omran_only)
 
@@ -874,14 +917,16 @@ def mark_notif_read(notif_id):
 @main.route("/api/messages/<int:user_id>")
 @login_required
 def api_messages(user_id):
-    if current_user.role != 'agent' and current_user.id != user_id:
+    if current_user.role not in ['agent', 'admin'] and current_user.id != user_id:
         return jsonify({"error": "Unauthorized"}), 403
 
-    msgs      = Message.query.filter_by(receiver_id=user_id).order_by(Message.timestamp.desc()).limit(50).all()
-    sent_msgs = Message.query.filter_by(sender_id=user_id).order_by(Message.timestamp.desc()).limit(50).all()
+    # Fetch 1-on-1 conversation
+    msgs = Message.query.filter(
+        ((Message.sender_id == current_user.id) & (Message.receiver_id == user_id)) |
+        ((Message.sender_id == user_id) & (Message.receiver_id == current_user.id))
+    ).order_by(Message.timestamp.desc()).limit(50).all()
 
-    all_msgs = list(set(msgs + sent_msgs))
-    all_msgs.sort(key=lambda x: x.timestamp)
+    all_msgs = msgs[::-1]  # reverse to chronological order
 
     return jsonify([{
         "id":          m.id,
