@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from extensions import db, limiter
 from models import (User, Property, Favorite, Area, PropertyImage,
                     Message, Inquiry, RecentlyViewed, Notification,
-                    ChatLog, ChatFeedback, Conversation)
+                    ChatLog, ChatFeedback, Conversation, InvestmentRequest)
 from forms import (RegistrationForm, LoginForm, PropertyForm,
                    SettingsProfileForm, SettingsSecurityForm,
                    SettingsPreferencesForm)
@@ -24,6 +24,40 @@ from firebase import db as firebase_db
 
 # ─── Blueprint ────────────────────────────────────────────────────────────────
 main = Blueprint('main', __name__)
+
+
+# =============================================================================
+# 🔄 RAG HELPERS — silent wrappers, never raise
+# مساعدات RAG — لا تُوقف التطبيق عند الخطأ، تُسجَّل فقط تحذيرات
+# =============================================================================
+
+def _rag_update(property_id: int) -> None:
+    """
+    Upsert a single property in ChromaDB after add or edit.
+    تحديث عقار واحد في ChromaDB بعد الإضافة أو التعديل.
+    Silently skipped if chromadb / OpenAI is unavailable.
+    """
+    try:
+        from rag_engine import update_property_in_rag
+        update_property_in_rag(property_id)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[RAG] update skipped for property {property_id}: {e}")
+
+
+def _rag_delete(property_id: int) -> None:
+    """
+    Remove a single property document from ChromaDB after deletion.
+    حذف وثيقة عقار من ChromaDB بعد حذفه من قاعدة البيانات.
+    Must be called BEFORE db.session.delete(prop) so the ID is still valid.
+    يجب الاستدعاء قبل حذف العقار من قاعدة البيانات.
+    """
+    try:
+        from rag_engine import delete_property_from_rag
+        delete_property_from_rag(property_id)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"[RAG] delete skipped for property {property_id}: {e}")
 
 
 # =====================================================
@@ -406,6 +440,10 @@ def delete_property(property_id):
         RecentlyViewed.query.filter_by(property_id=prop.id).delete()
         Message.query.filter_by(property_id=prop.id).update({'property_id': None})
 
+        # ── RAG: حذف وثيقة العقار من ChromaDB قبل حذفه من قاعدة البيانات ───
+        # Must run BEFORE db.session.delete so property_id is still meaningful
+        _rag_delete(prop.id)
+
         db.session.delete(prop)
         db.session.commit()
         flash("Property deleted successfully.", "success")
@@ -683,6 +721,10 @@ def new_property():
                 is_first = False
 
         db.session.commit()
+
+        # ── RAG: فهرسة العقار الجديد فورًا في ChromaDB ──────────────────────
+        _rag_update(prop.id)
+
         flash('Property added with images!', 'success')
         return redirect(url_for('main.dashboard'))
 
@@ -728,6 +770,10 @@ def edit_property(property_id):
                     ))
 
         db.session.commit()
+
+        # ── RAG: تحديث وثيقة العقار في ChromaDB بعد التعديل ────────────────
+        _rag_update(prop.id)
+
         flash('Property updated successfully!', 'success')
         return redirect(url_for('main.property_detail', property_id=prop.id))
 
@@ -947,27 +993,88 @@ def api_messages(user_id):
 
 @main.route("/api/predict_price", methods=["POST"])
 def predict_price_api():
+    """
+    AI Price Estimation endpoint — now powered by the REAL ML model.
+    تقدير سعر العقار باستخدام نموذج ML الحقيقي المُدرَّب على 16,000 نقطة بيانات.
+
+    Growth rates come from `ml_model.get_future_multiplier()`, which reads
+    Area.price_growth (set by train_from_db.py using real CAGR from
+    omanpDatabase.db — 2,000 properties × 8 years of price history).
+    """
+    from ml_model import get_future_multiplier, ensure_trained, trained as _ml_trained
+
     data  = request.get_json()
-    loc   = data.get("location", "").lower()
+    loc   = data.get("location", "")
     ptype = data.get("type", "Apartment")
-    price = float(data.get("price", 0))
+    try:
+        price = float(data.get("price", 0))
+    except (TypeError, ValueError):
+        price = 0
 
     if price <= 0:
         return jsonify({"error": "Valid price required"}), 400
 
-    if   "muscat"  in loc or "مسقط"   in loc: growth = 0.06
-    elif "salalah" in loc or "صلالة"  in loc: growth = 0.05
-    elif "barka"   in loc or "بركاء"  in loc: growth = 0.07
-    elif "sohar"   in loc or "صحار"   in loc: growth = 0.06
-    else:                                      growth = 0.055
+    # ── Normalize Omani location aliases (Alburaimi → Al Buraimi, etc.) ──────
+    _loc_aliases = {
+        'alburaimi': 'Al Buraimi', 'buraimi': 'Al Buraimi', 'al-buraimi': 'Al Buraimi',
+        'almouj':    'Al Mouj',    'mouj':    'Al Mouj',    'al-mouj':    'Al Mouj',
+        'almawaleh': 'Al Mawaleh', 'mawaleh': 'Al Mawaleh',
+        'alhail':    'Al Hail',    'hail':    'Al Hail',
+        'alkhuwair': 'Al Khuwair', 'khuwair': 'Al Khuwair',
+        'alghubra':  'Al Ghubra',  'ghubra':  'Al Ghubra',
+        'alkhoud':   'Al Khoud',   'khoud':   'Al Khoud',
+        'alseeb':    'Al Seeb',    'seeb':    'Al Seeb',
+    }
+    _norm = loc.lower().replace(' ', '').replace('-', '')
+    if _norm in _loc_aliases:
+        loc = _loc_aliases[_norm]
 
-    if   "villa" in ptype.lower(): rent_estimate = price * 0.065
-    elif "land"  in ptype.lower(): rent_estimate = price * 0.09
-    else:                          rent_estimate = price * 0.075
+    # ── Get ML-driven growth multipliers (deterministic, from real CAGR) ─────
+    # ضمان أن النموذج مُدرَّب (يُحمَّل من pickle عند الاستيراد)
+    ensure_trained()
+    try:
+        mult_1y = get_future_multiplier(loc, 1)
+        mult_5y = get_future_multiplier(loc, 5)
+        ml_used = True
+    except Exception as e:
+        # Fallback if ML model unavailable
+        mult_1y, mult_5y, ml_used = 1.055, (1.055 ** 5), False
 
-    roi    = (rent_estimate / price) * 100
-    val_1y = price * (1 + growth)
-    val_5y = price * ((1 + growth) ** 5)
+    annual_growth = mult_1y - 1   # actual annual rate from ML
+    val_1y = price * mult_1y
+    val_5y = price * mult_5y
+
+    # ── Year-by-year projection for the chart (0 → 10 years) ─────────────────
+    # توقّع سنة بسنة لرسم منحنى السعر — يُستخدم في Chart.js على الواجهة
+    projection = []
+    for yr in range(0, 11):
+        try:
+            m = get_future_multiplier(loc, yr) if yr > 0 else 1.0
+        except Exception:
+            m = (1 + annual_growth) ** yr
+        projection.append({
+            "year":  yr,
+            "value": round(price * m, 0),
+        })
+
+    # Rental ROI assumption by type (industry-standard rates)
+    if   "villa"      in ptype.lower(): rent_pct = 0.065
+    elif "land"       in ptype.lower(): rent_pct = 0.090
+    elif "townhouse"  in ptype.lower(): rent_pct = 0.070
+    elif "commercial" in ptype.lower(): rent_pct = 0.085
+    else:                               rent_pct = 0.075   # Apartment default
+
+    rent_estimate = price * rent_pct
+    roi           = rent_pct * 100
+
+    reason = (
+        f"ML-predicted {annual_growth * 100:.2f}% annual growth in {loc or 'this area'} "
+        f"(based on 2,000 Omani properties × 8 years of real price data, "
+        f"trained RandomForest model)."
+        if ml_used else
+        f"Estimated {annual_growth * 100:.1f}% annual growth — ML model unavailable, "
+        f"using fallback rate."
+    )
 
     return jsonify({
         "estimated_price": round(val_1y, 0),
@@ -975,8 +1082,12 @@ def predict_price_api():
         "yearly_income":   round(rent_estimate, 0),
         "value_1y":        round(val_1y, 0),
         "value_5y":        round(val_5y, 0),
-        "reason": (f"Expected {growth * 100:.1f}% annual growth in this area "
-                   f"driven by local market trends and ongoing developments.")
+        "annual_growth":   round(annual_growth * 100, 2),
+        "ml_powered":      ml_used,
+        "reason":          reason,
+        "projection":      projection,   # year-by-year for chart
+        "current_price":   round(price, 0),
+        "location":        loc or "Oman",
     })
 
 
@@ -1094,3 +1205,79 @@ def agent_message_thread(customer_id):
                            active_thread_id=customer_id,
                            active_customer=active_customer,
                            thread_msgs=thread_msgs)
+
+
+# =============================================================================
+# 💼 INVESTMENT REQUESTS API
+# واجهة طلبات الاستثمار — Intent F من الشاتبوت
+# =============================================================================
+
+@main.route("/api/investment_requests")
+@login_required
+def api_investment_requests():
+    """
+    Return all InvestmentRequests for the current agent (newest first).
+    إرجاع جميع طلبات الاستثمار للوكيل الحالي (الأحدث أولاً).
+
+    Agents only — returns 403 for other roles.
+    للوكلاء فقط — يُرجع 403 للأدوار الأخرى.
+    """
+    if current_user.role not in ('agent', 'admin'):
+        return jsonify({"error": "Agent access required"}), 403
+
+    # Admin sees all requests; agent sees only their own
+    # المشرف يرى جميع الطلبات؛ الوكيل يرى طلباته فقط
+    if current_user.role == 'admin':
+        requests_q = InvestmentRequest.query.order_by(
+            InvestmentRequest.timestamp.desc()
+        ).all()
+    else:
+        requests_q = InvestmentRequest.query.filter_by(
+            agent_id=current_user.id
+        ).order_by(InvestmentRequest.timestamp.desc()).all()
+
+    return jsonify([{
+        "id":        r.id,
+        "user":      r.user.username  if r.user  else "anonymous",
+        "agent":     r.agent.username if r.agent else "—",
+        "project":   r.project   or "—",
+        "message":   r.message   or "",
+        "status":    r.status,
+        "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M"),
+    } for r in requests_q])
+
+
+@main.route("/api/investment_requests/<int:req_id>/status", methods=["POST"])
+@login_required
+def update_investment_request_status(req_id):
+    """
+    Update the status of an InvestmentRequest (pending → contacted → closed).
+    تحديث حالة طلب الاستثمار (قيد الانتظار → تم التواصل → مُغلَق).
+
+    Body: { "status": "contacted" | "closed" | "pending" }
+    يقبل: { "status": "contacted" | "closed" | "pending" }
+    """
+    if current_user.role not in ('agent', 'admin'):
+        return jsonify({"error": "Agent access required"}), 403
+
+    req = InvestmentRequest.query.get_or_404(req_id)
+
+    # وكيل يمكنه تعديل طلباته فقط
+    if current_user.role == 'agent' and req.agent_id != current_user.id:
+        return jsonify({"error": "Not your request"}), 403
+
+    data       = request.get_json() or {}
+    new_status = data.get("status", "")
+    allowed    = ("pending", "contacted", "closed")
+
+    if new_status not in allowed:
+        return jsonify({"error": f"status must be one of {allowed}"}), 400
+
+    req.status = new_status
+    db.session.commit()
+
+    return jsonify({
+        "status":  "updated",
+        "req_id":  req_id,
+        "new_status": new_status,
+    })

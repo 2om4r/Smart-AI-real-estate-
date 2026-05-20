@@ -1,8 +1,17 @@
+import os
+import pickle
+import logging
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
+
+logger = logging.getLogger(__name__)
+
+# Path to the persisted model trained on 16,000 CSV data points
+# مسار النموذج المُدرَّب المحفوظ على 16,000 نقطة من CSV
+_MODEL_PKL = os.path.join(os.path.dirname(__file__), "ml_model_trained.pkl")
 
 preprocessor = ColumnTransformer(
     transformers=[
@@ -11,8 +20,21 @@ preprocessor = ColumnTransformer(
     remainder='passthrough'
 )
 
-model = RandomForestRegressor(n_estimators=100, random_state=42)
+model   = RandomForestRegressor(n_estimators=100, random_state=42)
 trained = False
+
+# ── Auto-load persisted model if pickle exists ─────────────────────────────
+# يُحمَّل النموذج المحفوظ تلقائياً عند وجود ملف pickle
+if os.path.exists(_MODEL_PKL):
+    try:
+        with open(_MODEL_PKL, 'rb') as _f:
+            _bundle      = pickle.load(_f)
+            preprocessor = _bundle['preprocessor']
+            model        = _bundle['model']
+            trained      = True
+        logger.info(f"[ML] Loaded pre-trained model from {_MODEL_PKL}")
+    except Exception as _e:
+        logger.warning(f"[ML] Could not load pickle: {_e} — will train on DB data.")
 
 def train_price_model(properties):
     global trained
@@ -113,3 +135,52 @@ def get_ml_investment_score(predicted_price, actual_price):
     ratio = predicted_price / actual_price
     score = 60 + ((ratio - 1.0) * 50)
     return min(max(round(score), 0), 100)
+
+
+def ensure_trained() -> bool:
+    """
+    Auto-train the model on all DB properties if not yet trained.
+    Called by the chatbot at request time — safe to call multiple times.
+    تدريب النموذج تلقائياً على عقارات قاعدة البيانات إذا لم يُدرَّب بعد.
+    آمن للاستدعاء المتعدد — يُرجع True إذا كان النموذج جاهزاً.
+    """
+    global trained
+    if trained:
+        return True
+    try:
+        from models import Property
+        props = Property.query.all()
+        if props:
+            train_price_model(props)
+            return trained
+    except Exception:
+        pass
+    return False
+
+
+def get_future_multiplier(location: str, years: int) -> float:
+    """
+    Return the COMPOUND price multiplier for a location over N years.
+    يُرجع مضاعف النمو المركّب للسعر على عدد السنوات المطلوب.
+
+    Example: get_future_multiplier("Muscat", 5) → 1.338
+    Future price = current_price × multiplier
+
+    - Backed by Area.price_growth (0-100 scale → 1%-15% annual rate)
+    - Fully DETERMINISTIC — no randomness
+    - Falls back to 5.5% annual rate if area not found
+    بدون عشوائية — حتمي بالكامل. يعطي نفس النتيجة لنفس المدخلات دائماً.
+    """
+    from models import Area
+
+    annual_rate = 0.055  # معدل افتراضي 5.5% سنوياً
+
+    if location and location.strip():
+        area = Area.query.filter(Area.name.ilike(f"%{location}%")).first()
+        if area and area.price_growth is not None:
+            # Scale 0-100 → 1%-15% annual growth rate (linear map)
+            # المقياس: 0 → 1%، 100 → 15%
+            annual_rate = max(min(0.01 + (area.price_growth / 100.0) * 0.14, 0.15), 0.01)
+
+    # فائدة مركبة: future = current × (1 + r)^n
+    return round((1 + annual_rate) ** years, 6)

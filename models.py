@@ -257,3 +257,42 @@ class RecentlyViewed(db.Model):
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     property = db.relationship('Property', backref='viewed_by')
+
+
+# ─── InvestmentRequest ────────────────────────────────────────────────────────
+# طلب استثمار — يُنشأ عندما يطلب المستخدم الاستثمار مع وكيل معين عبر الشاتبوت
+# Created when a user requests investment with a specific agent via the chatbot
+class InvestmentRequest(db.Model):
+    id       = db.Column(db.Integer, primary_key=True)
+
+    # nullable=True — المستخدمون المجهولون مسموح لهم بالطلب
+    # nullable=True allows anonymous (non-logged-in) users to submit requests
+    user_id  = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+
+    # الوكيل المستهدف بالطلب
+    # The agent this request is directed to
+    agent_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    # 'surooh' | 'omran' | agent username — مصدر الطلب / نوع المشروع
+    project  = db.Column(db.String(50), nullable=True)
+
+    # الرسالة الأصلية من المستخدم كما وردت من الشاتبوت
+    # Original user message captured from the chatbot
+    message  = db.Column(db.Text, nullable=True)
+
+    # دورة الحياة: pending → contacted → closed
+    # Lifecycle: pending → contacted → closed
+    status   = db.Column(db.String(20), nullable=False, default='pending')
+
+    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # foreign_keys مطلوب صراحةً لأن كلا العلاقتين تشيران إلى نفس الجدول (User)
+    # explicit foreign_keys required because both FKs point to the same table
+    user  = db.relationship('User', foreign_keys=[user_id],
+                            backref='investment_requests_sent')
+    agent = db.relationship('User', foreign_keys=[agent_id],
+                            backref='investment_requests_received')
+
+    def __repr__(self):
+        return (f"InvestmentRequest(id={self.id}, agent_id={self.agent_id}, "
+                f"status='{self.status}')")

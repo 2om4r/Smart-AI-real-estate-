@@ -65,6 +65,21 @@ def create_app(config_class=Config):
     with app.app_context():
         db.create_all()
 
+        # ── RAG: build / rebuild ChromaDB knowledge base on every startup ────
+        # يُعيد بناء قاعدة معرفة ChromaDB عند كل تشغيل للتطبيق
+        # Wrapped in try/except so a ChromaDB or OpenAI failure never blocks startup
+        # مُغلَّف بـ try/except لضمان أن أي خطأ في ChromaDB أو OpenAI لا يوقف التطبيق
+        import logging
+        _rag_logger = logging.getLogger("rag_engine")
+        try:
+            from rag_engine import build_knowledge_base
+            build_knowledge_base()
+            _rag_logger.info("[RAG] Knowledge base ready on startup.")
+        except Exception as _rag_err:
+            _rag_logger.warning(
+                f"[RAG] Knowledge base build skipped on startup: {_rag_err}"
+            )
+
     return app
 
 app = create_app()

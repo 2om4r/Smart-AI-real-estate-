@@ -68,11 +68,25 @@ document.addEventListener('DOMContentLoaded', function () {
     // =========================
     // 🧠 إضافة رسالة
     // =========================
+    // Render basic markdown for bot messages (**bold**, *italic*, newlines)
+    // User messages always use textContent (XSS safe)
+    function renderMarkdown(text) {
+        return text
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g,     '<em>$1</em>')
+            .replace(/\n/g,            '<br>');
+    }
+
     function addMessage(message, isUser) {
         const div = document.createElement('div');
         div.classList.add('chat-message');
         div.classList.add(isUser ? 'user-message' : 'bot-message');
-        div.textContent = message;
+        if (isUser) {
+            div.textContent = message;   // plain text — safe from XSS
+        } else {
+            div.innerHTML = renderMarkdown(message);  // bot text — render markdown
+        }
         chatBody.appendChild(div);
         chatBody.scrollTop = chatBody.scrollHeight;
     }
