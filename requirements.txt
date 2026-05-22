@@ -14,3 +14,4 @@ flask-wtf
 email-validator
 Flask-Limiter
 chromadb
+APScheduler

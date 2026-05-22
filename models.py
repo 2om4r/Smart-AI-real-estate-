@@ -66,6 +66,29 @@ class Property(db.Model):
     # Status & New property flags
     status = db.Column(db.String(30), default='available')  # available, under_construction
 
+    # ── Project hierarchy ──────────────────────────────────────────
+    # يَدعم إضافة "مشروع" (project) يَحتوي عدَّة وحدات (units)
+    # is_project=True  → مشروع رئيسي (parent)
+    # parent_project_id → الوحدة تنتمي لمشروع (child)
+    is_project        = db.Column(db.Boolean, default=False, nullable=False)
+    parent_project_id = db.Column(db.Integer, db.ForeignKey('property.id'), nullable=True)
+    developer         = db.Column(db.String(100))   # اسم المطوِّر
+    completion_date   = db.Column(db.String(50))    # تاريخ التسليم المتوقَّع
+
+    # ── 🚨 ML Anomaly Detection ─────────────────────────────────
+    # عند إضافة عقار، نُقارن سعره بتوَقُّع ML — إن انحرَفَ بـ >50% نُعلِّمه
+    # When listed, RF predicts a price. If listing deviates >50%, flag it.
+    flagged_anomaly  = db.Column(db.Boolean, default=False)
+    anomaly_severity = db.Column(db.String(20))   # 'low' | 'medium' | 'high'
+    anomaly_reason   = db.Column(db.String(255))  # human-readable explanation
+    ml_predicted_at_listing = db.Column(db.Float)  # ML estimate when added
+
+    # ── 💰 Sale tracking (for Active Learning) ──────────────────
+    # يَتم تَعبئتها عند تَأكيد البيع — تَصبح ground truth للتدريب القادم
+    sold_price       = db.Column(db.Float)
+    sold_date        = db.Column(db.DateTime)
+    days_on_market   = db.Column(db.Integer)
+
     @property
     def is_new(self):
         """Property is 'new' if created within last 30 days."""
@@ -75,6 +98,14 @@ class Property(db.Model):
     images = db.relationship('PropertyImage', backref='property', lazy=True, cascade="all, delete-orphan")
     favorited_by = db.relationship('Favorite', backref='property', lazy=True, cascade="all, delete-orphan")
     inquiries = db.relationship('Inquiry', backref='property', lazy=True, cascade="all, delete-orphan")
+
+    # وحدات المشروع: project.units → [unit1, unit2, ...]
+    units = db.relationship(
+        'Property',
+        backref=db.backref('parent_project', remote_side='Property.id'),
+        lazy='dynamic',
+        foreign_keys=[parent_project_id],
+    )
 
     def __repr__(self):
         return f"Property('{self.title}', '{self.type}', '{self.price}')"
@@ -296,3 +327,114 @@ class InvestmentRequest(db.Model):
     def __repr__(self):
         return (f"InvestmentRequest(id={self.id}, agent_id={self.agent_id}, "
                 f"status='{self.status}')")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🌲 ML TRAINING HISTORY — tracks every retrain run
+# يَحفظ سجلّاً كاملاً لكل عملية تَدريب: الإصدار، الدقَّة، السبب، الحالة
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TrainingHistory(db.Model):
+    """
+    Audit log for every ML retraining run.
+
+    Used by:
+      • scripts/retrain.py — writes a row after each successful train
+      • /api/ml/history    — admin sees all past runs
+      • /api/ml/rollback   — can pick previous version by id
+    """
+    __tablename__ = 'training_history'
+
+    id            = db.Column(db.Integer, primary_key=True)
+    version       = db.Column(db.String(40), unique=True, nullable=False)
+    model_path    = db.Column(db.String(255), nullable=False)
+
+    # Metrics
+    r2_score      = db.Column(db.Float)               # cross-validation R²
+    rows_count    = db.Column(db.Integer)             # total training rows
+    new_rows      = db.Column(db.Integer, default=0)  # new since previous train
+
+    # Training metadata
+    trained_at    = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    duration_sec  = db.Column(db.Float)                # how long it took
+    trigger       = db.Column(db.String(30))            # 'scheduled' | 'threshold' | 'manual'
+
+    # Deployment status
+    deployed      = db.Column(db.Boolean, default=False)
+    is_active     = db.Column(db.Boolean, default=False)    # only one row is_active=True
+    notes         = db.Column(db.Text)
+
+    def __repr__(self):
+        active = " ★ ACTIVE" if self.is_active else ""
+        return f"<TrainingHistory {self.version} R²={self.r2_score:.3f}{active}>"
+
+    def to_dict(self):
+        return {
+            'id':           self.id,
+            'version':      self.version,
+            'r2_score':     round(self.r2_score, 4) if self.r2_score else None,
+            'rows_count':   self.rows_count,
+            'new_rows':     self.new_rows,
+            'trained_at':   self.trained_at.isoformat() if self.trained_at else None,
+            'duration_sec': round(self.duration_sec, 1) if self.duration_sec else None,
+            'trigger':      self.trigger,
+            'deployed':     self.deployed,
+            'is_active':    self.is_active,
+            'notes':        self.notes,
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🎯 PREDICTION LOG — every ML prediction is recorded for active learning
+# سِجلّ التَنَبُّؤات: نَحفظ كل تَنَبُّؤ + النتيجة الفعليَّة (عند البيع)
+# هذا يَفتح الباب لـ Active Learning — تَحسين النموذج من النتائج الفعليَّة
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PredictionLog(db.Model):
+    """
+    Audit log of every ML prediction.
+
+    When a property sells, the actual_price is filled in. This gives us
+    ground truth to measure ML accuracy over time and feed back into
+    training (weighted by confirmation).
+    """
+    __tablename__ = 'prediction_log'
+
+    id              = db.Column(db.Integer, primary_key=True)
+    property_id     = db.Column(db.Integer, db.ForeignKey('property.id'), nullable=True)
+
+    # What ML predicted
+    predicted_price = db.Column(db.Float, nullable=False)
+    confidence      = db.Column(db.Float)         # 0-100 from RF tree variance
+    model_version   = db.Column(db.String(40))    # which RF version made this prediction
+
+    # Ground truth (filled when property sells)
+    actual_price    = db.Column(db.Float)
+    error_pct       = db.Column(db.Float)         # |actual - predicted| / actual × 100
+
+    # Context
+    listing_price   = db.Column(db.Float)         # what agent listed it at
+    features_json   = db.Column(db.Text)          # JSON dump of inputs
+
+    # Timestamps
+    predicted_at    = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    confirmed_at    = db.Column(db.DateTime)      # filled when actual_price set
+
+    property = db.relationship('Property', backref='predictions')
+
+    def __repr__(self):
+        return (f"<PredictionLog #{self.id} pred={self.predicted_price:.0f} "
+                f"actual={self.actual_price or '—'}>")
+
+    def to_dict(self):
+        return {
+            'id':              self.id,
+            'property_id':     self.property_id,
+            'predicted_price': self.predicted_price,
+            'actual_price':    self.actual_price,
+            'error_pct':       self.error_pct,
+            'confidence':      self.confidence,
+            'model_version':   self.model_version,
+            'predicted_at':    self.predicted_at.isoformat() if self.predicted_at else None,
+            'confirmed_at':    self.confirmed_at.isoformat() if self.confirmed_at else None,
+        }

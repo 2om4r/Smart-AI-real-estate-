@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4" style="max-width: 800px;">
+    <div class="d-flex align-items-center mb-4">
+        <a href="{{ url_for('main.project_detail', project_id=project.id) }}"
+           class="btn btn-sm btn-outline-secondary me-3">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <div>
+            <h2 class="mb-0 fw-bold">
+                <i class="fas fa-plus-circle text-success me-2"></i>Add Unit
+            </h2>
+            <p class="text-muted mb-0 small">
+                Adding to: <strong>{{ project.title }}</strong> · {{ project.location }}
+            </p>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+
+            <!-- Project context banner -->
+            <div class="alert border-0" style="background:#FFF8E1; color:#5D4037;">
+                <i class="fas fa-info-circle me-2"></i>
+                Location, city, and coordinates will be inherited from the project automatically.
+                You only need to fill the unit-specific info below.
+            </div>
+
+            <form method="POST" enctype="multipart/form-data" novalidate>
+                {{ form.hidden_tag() }}
+
+                <h5 class="fw-bold mb-3"><i class="fas fa-tag me-2 text-primary"></i>Unit Identification</h5>
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">{{ form.title.label }}</label>
+                        {{ form.title(class="form-control", placeholder='e.g. "Type A - 2BR Sea View"') }}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">{{ form.type.label }}</label>
+                        {{ form.type(class="form-select") }}
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">{{ form.description.label }}</label>
+                        {{ form.description(class="form-control", rows="3",
+                            placeholder="Layout, finishes, amenities, view...") }}
+                    </div>
+                </div>
+
+                <h5 class="fw-bold mt-4 mb-3"><i class="fas fa-ruler-combined me-2 text-info"></i>Specifications</h5>
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">{{ form.size.label }}</label>
+                        {{ form.size(class="form-control", placeholder="120") }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">{{ form.bedrooms.label }}</label>
+                        {{ form.bedrooms(class="form-control", placeholder="2") }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">{{ form.bathrooms.label }}</label>
+                        {{ form.bathrooms(class="form-control", placeholder="2") }}
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label fw-semibold">{{ form.floor.label }}</label>
+                        {{ form.floor(class="form-control", placeholder="3") }}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">{{ form.price.label }}</label>
+                        {{ form.price(class="form-control", placeholder="80000") }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">
+                            {{ form.quantity.label }}
+                            <span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;">BULK</span>
+                        </label>
+                        {{ form.quantity(class="form-control", placeholder="1", min="1", max="200") }}
+                        <small class="text-muted">
+                            <i class="fas fa-magic me-1"></i>Create multiple identical units at once
+                            (e.g. 20 type-A apartments)
+                        </small>
+                    </div>
+                </div>
+
+                <h5 class="fw-bold mt-4 mb-3"><i class="fas fa-images me-2 text-info"></i>Unit Images</h5>
+                <div>
+                    {{ form.images(class="form-control") }}
+                    <small class="text-muted">Optional. Will be applied to the first unit.</small>
+                </div>
+
+                <div class="d-grid mt-4">
+                    {{ form.submit(class="btn btn-success btn-lg fw-bold") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

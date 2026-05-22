@@ -3,7 +3,17 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 📱 Responsive viewport — viewport-fit=cover supports iPhone notch / safe area -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover">
+    <!-- 🎨 Browser theme color — colors the address bar on Android / Safari -->
+    <meta name="theme-color" content="#2E1A0F" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#8B5E3C" media="(prefers-color-scheme: light)">
+    <!-- 📱 iOS Safari standalone (Add to Home Screen) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Smart Estate">
+    <!-- 🤖 Modern mobile-web-app capable (Android Chrome) -->
+    <meta name="mobile-web-app-capable" content="yes">
     <title>{{ title }} - Smart Real Estate Oman</title>
     <!-- Bootstrap 5 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -43,8 +53,24 @@
                         <a class="nav-link fw-semibold" href="{{ url_for('main.dashboard') }}"><i class="fas fa-tachometer-alt"></i> {{ _('dashboard') | replace('_', ' ') | title }}</a>
                     </li>
                     {% if current_user.role == 'agent' %}
-                    <li class="nav-item">
-                        <a class="nav-link fw-semibold" href="{{ url_for('main.new_property') }}"><i class="fas fa-plus-circle"></i> {{ _('add property') | title }}</a>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link fw-semibold dropdown-toggle" href="#" id="addDropdown" role="button"
+                           data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-plus-circle"></i> {{ _('add property') | title }}
+                        </a>
+                        <ul class="dropdown-menu shadow-sm border-0" aria-labelledby="addDropdown">
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('main.new_property') }}">
+                                    <i class="fas fa-home text-primary me-2"></i>Single Property
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{{ url_for('main.new_project') }}">
+                                    <i class="fas fa-city text-warning me-2"></i>Project
+                                    <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;">MULTI-UNIT</span>
+                                </a>
+                            </li>
+                        </ul>
                     </li>
                     {% endif %}
                     {% endif %}

@@ -159,6 +159,10 @@
         <button class="flt-btn omran-btn" data-filter="omran">
           <i class="fas fa-building" style="color:#90caf9;font-size:.6rem;"></i> OMRAN
         </button>
+        <button class="flt-btn projects-btn" data-filter="projects"
+                style="background:linear-gradient(135deg,rgba(212,165,116,0.15),rgba(139,94,60,0.2));border:1px solid #8B5E3C;color:#5D4037;">
+          <i class="fas fa-city" style="color:#8B5E3C;font-size:.6rem;"></i> Projects
+        </button>
         <button class="flt-btn" data-filter="heat" style="background:linear-gradient(135deg,rgba(255,87,34,0.1),rgba(255,193,7,0.2));border:1px solid #ff9800;color:#e65100;">
           <i class="fas fa-fire" style="color:#ff5722;font-size:.6rem;"></i> Heatmap
         </button>
@@ -216,7 +220,7 @@
     attribution:'© OpenStreetMap contributors © CARTO', maxZoom:19
   }).addTo(map);
 
-  let allAreas=[], allSurooh=[], allOmran=[];
+  let allAreas=[], allSurooh=[], allOmran=[], allProjects=[];
   let layers=[];
   let clusterGroup = L.markerClusterGroup();
   let heatLayer = null;
@@ -281,7 +285,8 @@
   // ── Render ──────────────────────────────────────────────────
   function scoreToRadius(s){ return 2000+(s/100)*5000; }
 
-  function renderAll(areas, surooh, omran){
+  function renderAll(areas, surooh, omran, projects){
+    projects = projects || [];
     layers.forEach(l=>map.removeLayer(l)); layers=[];
     clusterGroup.clearLayers();
     if(heatLayer){ map.removeLayer(heatLayer); heatLayer=null; }
@@ -291,6 +296,15 @@
       areas.forEach(a => heatData.push([a.lat, a.lng, a.score / 100]));
       surooh.forEach(s => heatData.push([s.lat, s.lng, 0.8]));
       omran.forEach(o => heatData.push([o.lat, o.lng, (o.score || 85) / 100]));
+      // 🆕 Agent projects on heat map — intensity = 5-year growth %
+      projects.forEach(p => {
+        if (p.lat && p.lng) {
+          const intensity = p.projected_5y_growth_pct
+            ? Math.min(p.projected_5y_growth_pct / 100, 1.0)
+            : 0.75;
+          heatData.push([p.lat, p.lng, intensity]);
+        }
+      });
       heatLayer = L.heatLayer(heatData, {radius: 40, blur: 25, maxZoom: 12}).addTo(map);
       return;
     }
@@ -323,12 +337,70 @@
       }).bindPopup(makeOmranPopup(o),{maxWidth:290});
       clusterGroup.addLayer(marker);
     });
+
+    // 🆕 AGENT PROJECTS — distinct gold-brown markers (different from Surooh purple)
+    projects.forEach(p => {
+      if (!p.lat || !p.lng) return;
+      // Size scales with units count, glow proportional to ML growth
+      const radius = 4000 + Math.min((p.total_units || 10) / 50, 1) * 3000;
+      const growthColor = (p.projected_5y_growth_pct || 0) >= 50
+        ? { fill: '#FFB74D', stroke: '#F57C00' }   // high growth → orange
+        : { fill: '#D4A574', stroke: '#8B5E3C' };  // normal       → gold-brown
+      const ci = L.circle([p.lat, p.lng], {
+        radius,
+        color: growthColor.stroke,
+        fillColor: growthColor.fill,
+        fillOpacity: 0.25,
+        weight: 2.5,
+        dashArray: '8 6',
+      }).addTo(map).bindPopup(makeProjectPopup(p), { maxWidth: 300 });
+      layers.push(ci);
+    });
+  }
+
+  // 🆕 Project popup HTML — matches Area popup style (clean & compact)
+  function makeProjectPopup(p) {
+    const growthPct = p.projected_5y_growth_pct || 0;
+    const startPrice = (p.starting_price || 0).toLocaleString();
+    const unitsTxt = (p.units_added !== undefined && p.total_units)
+      ? `${p.units_added}/${p.total_units}`
+      : (p.units_added !== undefined ? `${p.units_added}` : '—');
+
+    // Status badge (matches .rec-badge style — green / orange / red)
+    let badgeColor, badgeIcon, badgeText;
+    if (growthPct >= 50) {
+      badgeColor = 'green'; badgeIcon = '🚀';  badgeText = 'Strong Growth';
+    } else if (growthPct >= 25) {
+      badgeColor = 'orange'; badgeIcon = '📊'; badgeText = 'Moderate Growth';
+    } else if (growthPct > 0) {
+      badgeColor = 'orange'; badgeIcon = '📊'; badgeText = 'Stable';
+    } else {
+      badgeColor = 'red'; badgeIcon = '⚠️'; badgeText = p.status || 'Under Review';
+    }
+
+    return `<div class="inv-popup">
+      <h3>${p.title}</h3>
+      <div class="stat-row"><span>📍 Location</span>     <span class="stat-val">${p.location || '—'}</span></div>
+      ${p.developer ? `<div class="stat-row"><span>🏢 Developer</span>    <span class="stat-val">${p.developer}</span></div>` : ''}
+      <div class="stat-row"><span>💰 Starting Price</span><span class="stat-val">OMR ${startPrice}</span></div>
+      <div class="stat-row"><span>🏘️ Units</span>        <span class="stat-val">${unitsTxt}</span></div>
+      ${growthPct ? `<div class="stat-row"><span>📈 5Y Growth (ML)</span><span class="stat-val">+${growthPct}%</span></div>` : ''}
+      ${p.completion_date ? `<div class="stat-row"><span>📅 Completion</span>  <span class="stat-val">${p.completion_date}</span></div>` : ''}
+      <div class="rec-badge ${badgeColor}">${badgeIcon} ${badgeText}</div>
+      <a href="${p.detail_url || '#'}"
+         style="display:block;margin-top:10px;text-align:center;background:#8B5E3C;color:#fff;
+                padding:7px;border-radius:6px;text-decoration:none;font-size:0.82rem;font-weight:700;
+                letter-spacing:0.3px;">
+        View Project →
+      </a>
+    </div>`;
   }
 
   // ── Sidebar list ────────────────────────────────────────────
-  function renderList(areas, surooh, omran){
+  function renderList(areas, surooh, omran, projects){
+    projects = projects || [];
     const el=document.getElementById('area-list');
-    const total=areas.length+surooh.length+omran.length;
+    const total=areas.length+surooh.length+omran.length+projects.length;
     document.getElementById('zone-count').textContent=
       `${total} zone${total!==1?'s':''} displayed`;
 
@@ -362,7 +434,14 @@
       image_url:o.image_url||null
     }));
 
-    const combined=[...aCards,...sCards,...oCards];
+    // 🆕 Agent projects sidebar cards
+    const pCards = projects.map(p=>({
+      kind:'project', color:'gold', name:p.title, lat:p.lat, lng:p.lng,
+      meta:`${p.location || ''} · ${p.units_added}${p.total_units?'/'+p.total_units:''} units · OMR ${(p.starting_price||0).toLocaleString()}${p.projected_5y_growth_pct?' · +' + p.projected_5y_growth_pct + '% 5y':''}`,
+      score:null, image_url:null, detail_url:p.detail_url
+    }));
+
+    const combined=[...aCards,...sCards,...oCards,...pCards];
     el.innerHTML=combined.map((item,i)=>{
       const thumbHtml = item.image_url
         ? `<img src="${item.image_url}" class="area-thumb" alt="${item.name}">`
@@ -394,13 +473,14 @@
   // ── Apply filter ─────────────────────────────────────────────
   function applyFilter(filter){
     activeFilter=filter;
-    let fAreas=allAreas, fSurooh=allSurooh, fOmran=allOmran;
-    if(filter==='surooh'){ fAreas=[]; fOmran=[]; }
-    else if(filter==='omran'){ fAreas=[]; fSurooh=[]; }
+    let fAreas=allAreas, fSurooh=allSurooh, fOmran=allOmran, fProjects=allProjects;
+    if(filter==='surooh'){ fAreas=[]; fOmran=[]; fProjects=[]; }
+    else if(filter==='omran'){ fAreas=[]; fSurooh=[]; fProjects=[]; }
+    else if(filter==='projects'){ fAreas=[]; fSurooh=[]; fOmran=[]; }
     else if(filter==='heat'){ /* show all but formatted as heat in renderAll */ }
-    else if(filter!=='all'){ fSurooh=[]; fOmran=[]; fAreas=allAreas.filter(a=>a.color===filter); }
-    renderAll(fAreas,fSurooh,fOmran);
-    renderList(fAreas,fSurooh,fOmran);
+    else if(filter!=='all'){ fSurooh=[]; fOmran=[]; fProjects=[]; fAreas=allAreas.filter(a=>a.color===filter); }
+    renderAll(fAreas,fSurooh,fOmran,fProjects);
+    renderList(fAreas,fSurooh,fOmran,fProjects);
   }
 
   document.querySelectorAll('.flt-btn').forEach(btn=>{
@@ -416,8 +496,9 @@
     fetch('/api/areas').then(r=>r.json()),
     fetch('/api/surooh_projects').then(r=>r.json()),
     fetch('/api/omran_properties').then(r=>r.json()),
-  ]).then(([areas,surooh,omran])=>{
-    allAreas=areas; allSurooh=surooh; allOmran=omran;
+    fetch('/api/projects').then(r=>r.json()).catch(()=>[]),
+  ]).then(([areas,surooh,omran,projects])=>{
+    allAreas=areas; allSurooh=surooh; allOmran=omran; allProjects=projects||[];
     applyFilter('all');
   }).catch(()=>{
     document.getElementById('zone-count').textContent='Failed to load data';

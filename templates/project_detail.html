@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+
+    <!-- ═══ Project Header ═══ -->
+    <div class="card border-0 shadow-sm mb-4" style="background:linear-gradient(135deg,#0a1929 0%,#1a3a5c 100%); color:#fff;">
+        <div class="card-body p-4 position-relative">
+            <!-- ML/Project badge -->
+            <div style="position:absolute; top:18px; right:18px;">
+                <span class="badge" style="background:linear-gradient(135deg,#8B5E3C,#D4A574); padding:6px 12px; font-size:0.7rem; font-weight:700; letter-spacing:0.5px;">
+                    <i class="fas fa-city me-1"></i>PROJECT
+                </span>
+                {% if project.status == 'under_construction' %}
+                <span class="badge bg-warning text-dark ms-1" style="padding:6px 12px;">
+                    <i class="fas fa-hard-hat me-1"></i>Under Construction
+                </span>
+                {% elif project.status == 'off_plan' %}
+                <span class="badge bg-info ms-1" style="padding:6px 12px;">Off-Plan</span>
+                {% else %}
+                <span class="badge bg-success ms-1" style="padding:6px 12px;">Available</span>
+                {% endif %}
+            </div>
+
+            <div class="text-uppercase small mb-1" style="opacity:0.6; letter-spacing:1.5px; font-weight:600;">
+                <i class="fas fa-building me-1"></i>{{ project.developer or 'Developer' }}
+            </div>
+            <h1 class="fw-bold mb-2" style="font-size:2.2rem;">{{ project.title }}</h1>
+            <div class="mb-3" style="opacity:0.85;">
+                <i class="fas fa-map-marker-alt me-1 text-warning"></i>
+                {{ project.location }}{% if project.city %}, {{ project.city }}{% endif %}
+                {% if project.completion_date %}
+                · <i class="fas fa-calendar-alt me-1 text-info"></i>Completion: {{ project.completion_date }}
+                {% endif %}
+            </div>
+            <p style="opacity:0.85; max-width:800px;">{{ project.description }}</p>
+
+            <!-- Project metrics row -->
+            <div class="row g-3 mt-3">
+                <div class="col-md-3 col-6">
+                    <div class="text-uppercase small" style="opacity:0.6; letter-spacing:1px;">Units Added</div>
+                    <div class="fw-bold" style="font-size:1.6rem; color:#D4A574;">
+                        {{ stats.unit_count }}{% if project.total_units %} / {{ project.total_units }}{% endif %}
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="text-uppercase small" style="opacity:0.6; letter-spacing:1px;">Starting From</div>
+                    <div class="fw-bold" style="font-size:1.6rem; color:#81c784;">
+                        {% if stats.min_price > 0 %}
+                            OMR {{ "{:,.0f}".format(stats.min_price) }}
+                        {% else %}
+                            OMR {{ "{:,.0f}".format(project.price) }}
+                        {% endif %}
+                    </div>
+                </div>
+                {% if stats.unit_count > 0 %}
+                <div class="col-md-3 col-6">
+                    <div class="text-uppercase small" style="opacity:0.6; letter-spacing:1px;">Avg Price</div>
+                    <div class="fw-bold" style="font-size:1.6rem; color:#90caf9;">
+                        OMR {{ "{:,.0f}".format(stats.avg_price) }}
+                    </div>
+                </div>
+                {% endif %}
+                {% if project.investment_omr %}
+                <div class="col-md-3 col-6">
+                    <div class="text-uppercase small" style="opacity:0.6; letter-spacing:1px;">Total Investment</div>
+                    <div class="fw-bold" style="font-size:1.6rem; color:#ffd54f;">
+                        OMR {{ "{:,.0f}".format(project.investment_omr) }}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ Action buttons (only for owner) ═══ -->
+    {% if current_user.is_authenticated and (current_user.id == project.agent_id or current_user.role == 'admin') %}
+    <div class="d-flex gap-2 mb-4 flex-wrap">
+        <a href="{{ url_for('main.add_unit', project_id=project.id) }}" class="btn btn-success">
+            <i class="fas fa-plus me-1"></i>Add Unit
+        </a>
+        <form method="POST" action="{{ url_for('main.delete_project', project_id=project.id) }}"
+              style="display:inline;"
+              onsubmit="return confirm('Delete this project and ALL {{ stats.unit_count }} units?');">
+            <button class="btn btn-outline-danger">
+                <i class="fas fa-trash me-1"></i>Delete Project
+            </button>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- ═══ Unit type breakdown ═══ -->
+    {% if stats.unit_types %}
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <h5 class="fw-bold mb-3"><i class="fas fa-chart-pie text-primary me-2"></i>Unit Mix</h5>
+            <div class="d-flex flex-wrap gap-2">
+                {% for ptype, count in stats.unit_types.items() %}
+                <span class="badge bg-light text-dark p-2" style="font-size:0.9rem; border:1px solid #ddd;">
+                    {% if ptype == 'Apartment' %}🏢
+                    {% elif ptype == 'Villa' %}🏡
+                    {% elif ptype == 'Townhouse' %}🏘️
+                    {% elif ptype == 'Penthouse' %}🌆
+                    {% else %}🏠{% endif %}
+                    <strong>{{ ptype }}</strong> · {{ count }} unit{% if count > 1 %}s{% endif %}
+                </span>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ═══ Units grid ═══ -->
+    <h3 class="fw-bold mb-3">
+        <i class="fas fa-th text-warning me-2"></i>Available Units
+        <span class="badge bg-secondary ms-2">{{ units|length }}</span>
+    </h3>
+
+    {% if units %}
+    <div class="row g-3">
+        {% for unit in units %}
+        <div class="col-md-4 col-sm-6">
+            <div class="card h-100 border-0 shadow-sm" style="transition:transform 0.2s;"
+                 onmouseover="this.style.transform='translateY(-4px)'"
+                 onmouseout="this.style.transform='translateY(0)'">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <span class="badge bg-light text-dark">
+                            {% if unit.type == 'Apartment' %}🏢
+                            {% elif unit.type == 'Villa' %}🏡
+                            {% elif unit.type == 'Townhouse' %}🏘️
+                            {% else %}🏠{% endif %}
+                            {{ unit.type }}
+                        </span>
+                        {% if unit.status == 'sold' %}
+                        <span class="badge bg-danger">SOLD</span>
+                        {% elif unit.is_new %}
+                        <span class="badge bg-success">NEW</span>
+                        {% endif %}
+                    </div>
+
+                    <h5 class="card-title fw-bold mb-2" style="font-size:1rem;">{{ unit.title }}</h5>
+
+                    <div class="text-muted small mb-2">
+                        {% if unit.bedrooms %}<i class="fas fa-bed me-1"></i>{{ unit.bedrooms }}BR{% endif %}
+                        {% if unit.bathrooms %} · <i class="fas fa-bath me-1"></i>{{ unit.bathrooms }}BA{% endif %}
+                        {% if unit.size %} · <i class="fas fa-ruler me-1"></i>{{ unit.size|int }} m²{% endif %}
+                    </div>
+
+                    <div class="fw-bold mt-2" style="font-size:1.2rem; color:#8B5E3C;">
+                        OMR {{ "{:,.0f}".format(unit.price) }}
+                    </div>
+
+                    <a href="{{ url_for('main.property_detail', property_id=unit.id) }}"
+                       class="btn btn-sm btn-outline-primary w-100 mt-3">
+                        View Details
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card border-0 shadow-sm">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-inbox text-muted" style="font-size:3rem; opacity:0.3;"></i>
+            <p class="text-muted mt-3 mb-3">No units added to this project yet.</p>
+            {% if current_user.is_authenticated and current_user.id == project.agent_id %}
+            <a href="{{ url_for('main.add_unit', project_id=project.id) }}" class="btn btn-success">
+                <i class="fas fa-plus me-1"></i>Add First Unit
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

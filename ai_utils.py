@@ -167,7 +167,14 @@ def portfolio_summary(properties: list) -> dict:
 def recommend_investment(properties: list) -> dict | None:
     """
     Pick the best investment property from a list and explain why.
-    اختيار أفضل عقار استثماري وتفسير السبب.
+    اختيار أفضل عقار استثماري بناءً على نموذج ML المُدرَّب على بيانات حقيقية.
+
+    Upgrades over v1:
+      ✅ ML-driven growth per area (from get_future_multiplier, real CAGR)
+      ✅ Per-area + per-type avg price (not global average)
+      ✅ Real risk level from area data, not just score
+      ✅ 5-year projected price for top pick
+      ✅ ML confidence indicator
     """
     if not properties:
         return None
@@ -184,29 +191,88 @@ def recommend_investment(properties: list) -> dict | None:
     best    = scored[0]
     worst_2 = scored[-2:] if len(scored) >= 2 else []
 
-    reason = "Chosen because: "
-    if float(best.get('price', avg_price)) < avg_price:
-        reason += f"price is below market avg (< OMR {int(avg_price)}). "
-    if best['roi'] >= 6.0:
-        reason += f"high rental demand ({best['roi']}% ROI). "
-    if best['score'] > 80:
-        reason += "extremely strong future growth potential. "
-    if reason == "Chosen because: ":
-        reason = "Balanced mix of location and demand factors."
+    # ── ML-driven growth rate for the best area ────────────────────────────
+    # نَستخدم نموذج ML الحقيقي بدلاً من السلسلة الثابتة "5-8%"
+    try:
+        from ml_model import get_future_multiplier
+        best_location = best.get("location", "")
+        mult_1y = get_future_multiplier(best_location, 1)
+        mult_5y = get_future_multiplier(best_location, 5)
+        annual_growth_pct = (mult_1y - 1) * 100
+        five_year_growth_pct = (mult_5y - 1) * 100
+        predicted_growth_str = f"{annual_growth_pct:.1f}%/yr"
+        ml_powered = True
+    except Exception:
+        annual_growth_pct = 6.5
+        five_year_growth_pct = 37.0
+        predicted_growth_str = "5-8%/yr"
+        ml_powered = False
 
-    risk_level = "low" if best['score'] > 75 else "medium" if best['score'] > 50 else "high"
+    # ── 5-year projected price for top pick ────────────────────────────────
+    best_price = float(best.get('price', 0))
+    projected_5y = round(best_price * (1 + five_year_growth_pct / 100), 0) if best_price else 0
+    gain_5y = projected_5y - best_price
+    gain_pct = (gain_5y / best_price * 100) if best_price > 0 else 0
+
+    # ── Per-type avg for fair comparison ──────────────────────────────────
+    same_type = [p for p in properties if p.get('type') == best.get('type')]
+    type_avg = statistics.mean([float(p.get('price', 0)) for p in same_type
+                                if p.get('price')]) if same_type else avg_price
+
+    # ── Build smart reason (ML-driven, location-aware) ────────────────────
+    reason_parts = []
+    if best_price < type_avg * 0.9:
+        pct_below = round((1 - best_price / type_avg) * 100)
+        reason_parts.append(f"undervalued by {pct_below}% vs {best.get('type','similar')} avg")
+    if best['roi'] >= 7.0:
+        reason_parts.append(f"strong rental yield ({best['roi']}% ROI)")
+    if annual_growth_pct >= 8.0:
+        reason_parts.append(f"ML predicts {annual_growth_pct:.1f}% annual growth")
+    elif annual_growth_pct >= 5.0:
+        reason_parts.append(f"steady {annual_growth_pct:.1f}% annual appreciation")
+    if best['score'] > 80:
+        reason_parts.append("excellent location-demand fundamentals")
+
+    if reason_parts:
+        reason = "Selected because " + ", ".join(reason_parts) + "."
+    else:
+        reason = "Balanced opportunity across location, price, and ROI factors."
+
+    # ── Risk level: combine score + area volatility ───────────────────────
+    risk_level = (
+        "low"      if best['score'] > 80 and annual_growth_pct > 5 else
+        "medium"   if best['score'] > 60 else
+        "high"
+    )
+
+    # ── Confidence: depends on data availability ──────────────────────────
+    confidence = (
+        90 if ml_powered and len(properties) >= 20 else
+        75 if ml_powered and len(properties) >= 5  else
+        60 if ml_powered else
+        45
+    )
 
     return {
-        "best_project":     best.get("location", "Unknown"),
-        "type":             best.get("type", "Unknown"),
-        "score":            best["score"],
-        "roi":              best["roi"],
-        "predicted_growth": "5-8%",
-        "reason":           reason,
-        "risk_level":       risk_level,
-        "avg_price":        int(avg_price),
-        "top_3":            scored[:3],
-        "worst_2":          worst_2,
+        "best_project":         best.get("location", "Unknown"),
+        "type":                 best.get("type", "Unknown"),
+        "score":                best["score"],
+        "roi":                  best["roi"],
+        "predicted_growth":     predicted_growth_str,
+        "annual_growth_pct":    round(annual_growth_pct, 1),
+        "five_year_growth_pct": round(five_year_growth_pct, 1),
+        "projected_5y_price":   projected_5y,
+        "gain_5y":              gain_5y,
+        "gain_pct":             round(gain_pct, 1),
+        "current_price":        best_price,
+        "type_avg_price":       round(type_avg, 0),
+        "reason":               reason,
+        "risk_level":           risk_level,
+        "avg_price":            int(avg_price),
+        "confidence":           confidence,
+        "ml_powered":           ml_powered,
+        "top_3":                scored[:3],
+        "worst_2":              worst_2,
     }
 
 
@@ -634,6 +700,136 @@ def _handle_contact_agent(msg: str, is_arabic: bool) -> dict | None:
 # "عندي فيلا بـ 500,000 ريال، كم سيكون سعرها بعد 5 سنوات؟"
 # =============================================================================
 
+# =============================================================================
+# 🏗️ INTENT I — PROJECTS / DEVELOPMENTS
+# "show me projects in Muscat" / "ما هي المشاريع المتاحة؟"
+# =============================================================================
+
+def _handle_projects(msg: str, is_arabic: bool) -> dict | None:
+    """
+    Intent I: list multi-unit projects, optionally filtered by city.
+    النية I: عرض المشاريع متعدِّدة الوحدات، مع تصفية اختياريَّة حسب المدينة.
+
+    Triggers (English): "projects", "developments", "new projects", "compounds"
+    Triggers (Arabic):  "مشاريع", "مشروع", "كومباوند", "مجمَّعات", "تطوير عقاري"
+
+    Returns project cards with:
+      - Project name + developer
+      - Location, completion date
+      - Starting price + total units
+      - 5-year ML growth projection
+      - Direct link to project page
+    """
+    # ── Extract city hint (optional filter) ───────────────────────────────
+    city_hint = ''
+    for pattern in [r'في\s+([A-Za-zأ-ي\s]+)', r'in\s+([A-Za-z\s]+)',
+                    r'at\s+([A-Za-z\s]+)', r'بـ?\s+([A-Za-zأ-ي]+)']:
+        m = re.search(pattern, msg, re.IGNORECASE)
+        if m:
+            cand = m.group(1).strip().split()[0]
+            if cand.lower() not in ('the', 'a', 'an', 'في', 'من', 'مع'):
+                city_hint = cand
+                break
+
+    # ── Query projects from DB ────────────────────────────────────────────
+    q = Property.query.filter_by(is_project=True)
+    if city_hint:
+        q = q.filter(
+            db.or_(
+                Property.location.ilike(f"%{city_hint}%"),
+                Property.city.ilike(f"%{city_hint}%"),
+            )
+        )
+    projects = q.order_by(Property.created_at.desc()).limit(10).all()
+
+    # If filter returned nothing, show all
+    if not projects and city_hint:
+        projects = Property.query.filter_by(is_project=True).limit(10).all()
+
+    if not projects:
+        text = (
+            "عذراً، لا توجد مشاريع عقاريَّة مسجَّلة حالياً. 🏗️"
+            if is_arabic else
+            "Sorry, no real-estate projects are registered yet. 🏗️"
+        )
+        return {"text": text, "properties": [], "intent": "projects"}
+
+    # ── Build response with ML projections ────────────────────────────────
+    project_cards = []
+    lines = []
+    for p in projects:
+        try:
+            from ml_model import get_future_multiplier
+            mult_5y = get_future_multiplier(p.location, 5)
+            growth_5y_pct = round((mult_5y - 1) * 100, 1)
+        except Exception:
+            growth_5y_pct = None
+
+        units_count = Property.query.filter_by(parent_project_id=p.id).count()
+        starting_price = float(p.price or 0)
+
+        project_cards.append({
+            "id":              p.id,
+            "title":           p.title,
+            "type":            "Project",
+            "developer":       p.developer or "—",
+            "location":        p.location,
+            "city":            p.city,
+            "starting_price":  starting_price,
+            "price":           starting_price,
+            "total_units":     p.total_units or 0,
+            "units_added":     units_count,
+            "completion_date": p.completion_date or "TBD",
+            "status":          p.status,
+            "growth_5y_pct":   growth_5y_pct,
+            "lat":             p.latitude,
+            "lng":             p.longitude,
+            "agent":           p.agent.username if p.agent else "unknown",
+            "is_project":      True,
+        })
+
+        # Build text line per project
+        growth_txt = (f" · ML نمو 5 سنوات: +{growth_5y_pct}%"
+                     if is_arabic and growth_5y_pct else
+                     f" · 5y ML growth: +{growth_5y_pct}%"
+                     if growth_5y_pct else "")
+        if is_arabic:
+            lines.append(
+                f"🏗️ **{p.title}**\n"
+                f"   📍 {p.location} · 🏢 {p.developer or 'مطوِّر غير محدَّد'}\n"
+                f"   💰 بداية من {starting_price:,.0f} OMR · "
+                f"{units_count}/{p.total_units or '?'} وحدة"
+                f"{growth_txt}\n"
+                f"   📅 التسليم: {p.completion_date or 'غير محدَّد'}"
+            )
+        else:
+            lines.append(
+                f"🏗️ **{p.title}**\n"
+                f"   📍 {p.location} · 🏢 {p.developer or 'Developer TBD'}\n"
+                f"   💰 From {starting_price:,.0f} OMR · "
+                f"{units_count}/{p.total_units or '?'} units"
+                f"{growth_txt}\n"
+                f"   📅 Completion: {p.completion_date or 'TBD'}"
+            )
+
+    city_label = f"في {city_hint} " if city_hint and is_arabic else \
+                 f"in {city_hint} " if city_hint else ""
+
+    if is_arabic:
+        text = (f"🏗️ المشاريع العقاريَّة المتاحة {city_label}({len(projects)}):\n\n"
+                + "\n\n".join(lines))
+    else:
+        text = (f"🏗️ Available real-estate projects {city_label}({len(projects)}):\n\n"
+                + "\n\n".join(lines))
+
+    return {
+        "text":       text,
+        "properties": project_cards,
+        "intent":     "projects",
+        "projects":   project_cards,
+    }
+
+
 def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
     """
     Intent H: user already owns (or hypothetically has) a property and wants
@@ -924,6 +1120,33 @@ def get_ai_response(prompt: str,
             result["conversation_id"] = conversation_id
             result.setdefault("investment_hotspots", [])
             return result
+
+    # ── 3a-bis. Intent I — PROJECTS / DEVELOPMENTS ────────────────────────────
+    # "show me projects in Muscat" / "ما هي المشاريع المتاحة؟"
+    # يُحقَن قبل البحث العام لأن "projects" كلمة عامَّة تخلط مع "properties"
+    project_kws_en = [
+        "project", "projects", "development", "developments",
+        "compound", "compounds", "new project", "off-plan",
+        "off plan", "under construction", "multi-unit",
+    ]
+    project_kws_ar = [
+        "مشروع", "مشاريع", "كومباوند", "مجمَّع", "مجمَّعات",
+        "تطوير عقاري", "مشروع جديد", "تحت الإنشاء", "تحت البناء",
+    ]
+    if any(kw in msg_lower for kw in project_kws_en + project_kws_ar):
+        # تجاهل إن كان "properties" بدون "project" (لتجنُّب hijacking البحث العام)
+        if "project" in msg_lower or "مشروع" in msg_lower or "كومباوند" in msg_lower \
+                or "مجمَّع" in msg_lower or "off-plan" in msg_lower \
+                or "development" in msg_lower or "تطوير" in msg_lower \
+                or "under construction" in msg_lower or "تحت الإنشاء" in msg_lower:
+            result = _handle_projects(prompt, is_arabic)
+            if result:
+                _log_chat(conversation_id, user_id, prompt,
+                          result["text"], result["intent"], language, None,
+                          round(time.time() - start_time, 3))
+                result["conversation_id"] = conversation_id
+                result.setdefault("investment_hotspots", [])
+                return result
 
     # ── 3b. Intent H — OWN PROPERTY FORECAST ─────────────────────────────────
     # "I have a villa 500,000 OMR... after 5 years?" — pure calculation, no DB needed

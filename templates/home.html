@@ -93,6 +93,7 @@
     </div>
 </div>
 
+
 <!-- Price Prediction Modal -->
 <div class="modal fade" id="pricePredictModal" tabindex="-1">
     <div class="modal-dialog">
@@ -165,6 +166,22 @@ document.getElementById('prediction-form').addEventListener('submit', function(e
                     <span class="badge bg-success" style="font-size:0.8rem;">ROI ${data.roi}%</span>
                 </div>
                 ${data.annual_growth ? `<div class="text-muted small mb-2"><i class="fas fa-chart-line text-success me-1"></i> Annual growth: <strong>${data.annual_growth}%</strong></div>` : ''}
+                ${data.ml_confidence !== undefined ? (() => {
+                    const c = data.ml_confidence;
+                    const band = data.confidence_band || (c >= 80 ? 'high' : c >= 50 ? 'medium' : 'low');
+                    const colorMap = { high: 'success', medium: 'warning', low: 'danger' };
+                    const iconMap  = { high: 'check-circle', medium: 'exclamation-circle', low: 'exclamation-triangle' };
+                    return `<div class="text-muted small mb-2">
+                        <i class="fas fa-${iconMap[band]} text-${colorMap[band]} me-1"></i>
+                        ML Confidence: <strong>${c}%</strong> (${band})
+                        ${data.price_range && data.price_range[0] ? `<span class="ms-2 text-muted" style="font-size:0.85em;">
+                            range: OMR ${Number(data.price_range[0]).toLocaleString()}–${Number(data.price_range[1]).toLocaleString()}
+                        </span>` : ''}
+                    </div>`;
+                })() : ''}
+                ${data.cold_start_msg ? `<div class="alert alert-warning py-2 my-2" style="font-size:0.8rem;">
+                    ${data.cold_start_msg}
+                </div>` : ''}
                 <div class="row g-2 mb-2">
                     <div class="col-6">
                         <div class="p-2 rounded bg-white border" style="font-size:0.85rem;">
@@ -225,34 +242,65 @@ document.getElementById('prediction-form').addEventListener('submit', function(e
 
             const labels = data.projection.map(p => 'Year ' + p.year);
             const values = data.projection.map(p => p.value);
+            const areaValues = (data.area_projection || []).map(p => p.value);
+            const govValues  = (data.gov_projection || []).map(p => p.value);
 
             const grad = ctx.createLinearGradient(0, 0, 0, 220);
             grad.addColorStop(0, 'rgba(212, 165, 116, 0.45)');
             grad.addColorStop(1, 'rgba(212, 165, 116, 0.02)');
 
+            // Datasets — 3 lines: this property, area average, governorate
+            const datasets = [
+                {
+                    label: '📍 This Property',
+                    data: values,
+                    borderColor: '#8B5E3C',
+                    backgroundColor: grad,
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.35,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#8B5E3C',
+                    pointHoverRadius: 7,
+                    pointHoverBackgroundColor: '#D4A574',
+                },
+            ];
+            if (areaValues.length) {
+                datasets.push({
+                    label: '🏘️ Area Average',
+                    data: areaValues,
+                    borderColor: '#1976d2',
+                    backgroundColor: 'transparent',
+                    borderWidth: 2,
+                    borderDash: [6, 4],
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 2,
+                });
+            }
+            if (govValues.length) {
+                datasets.push({
+                    label: '🗺️ Governorate Avg',
+                    data: govValues,
+                    borderColor: '#43a047',
+                    backgroundColor: 'transparent',
+                    borderWidth: 1.5,
+                    borderDash: [2, 3],
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 1,
+                });
+            }
+
             _priceChart = new Chart(ctx, {
                 type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'Estimated Value (OMR)',
-                        data: values,
-                        borderColor: '#8B5E3C',
-                        backgroundColor: grad,
-                        borderWidth: 2.5,
-                        fill: true,
-                        tension: 0.35,
-                        pointRadius: 4,
-                        pointBackgroundColor: '#8B5E3C',
-                        pointHoverRadius: 7,
-                        pointHoverBackgroundColor: '#D4A574',
-                    }]
-                },
+                data: { labels, datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false },
+                        legend: { display: true, position: 'bottom',
+                                  labels: { boxWidth: 12, font: { size: 10 } } },
                         tooltip: {
                             callbacks: {
                                 title: (items) => items[0].label,

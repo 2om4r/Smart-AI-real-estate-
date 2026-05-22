@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .ml-card {
+    background: linear-gradient(135deg, #0a1929 0%, #1a3a5c 100%);
+    color: #e3f2fd;
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: 0 8px 32px rgba(10,25,41,0.4);
+  }
+  .ml-stat {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 14px;
+    color: #e3f2fd;
+  }
+  .ml-stat .label {
+    font-size: 0.7rem; opacity: 0.6;
+    text-transform: uppercase; letter-spacing: 1.2px;
+  }
+  .ml-stat .value {
+    font-size: 1.6rem; font-weight: 800; margin-top: 4px;
+  }
+  .ml-stat .sub { font-size: 0.78rem; opacity: 0.7; margin-top: 2px; }
+  .ml-btn {
+    background: rgba(66,165,245,0.18);
+    border: 1px solid rgba(66,165,245,0.4);
+    color: #90caf9;
+    padding: 8px 18px;
+    border-radius: 20px;
+    font-weight: 600;
+    margin-right: 8px;
+    transition: all .2s;
+  }
+  .ml-btn:hover { background: rgba(66,165,245,0.3); }
+  .ml-btn.danger { background: rgba(229,57,53,0.15); border-color: rgba(229,57,53,0.4); color: #ef9a9a; }
+  .ml-btn.danger:hover { background: rgba(229,57,53,0.3); }
+  .history-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    color: #e3f2fd; font-size: 0.85rem;
+  }
+  .history-row.active { background: rgba(76,175,80,0.10); }
+  .anomaly-row {
+    padding: 10px 14px; border-radius: 8px; margin-bottom: 8px;
+    color: #fff; font-size: 0.85rem;
+  }
+  .anomaly-high   { background: rgba(229,57,53,0.85); }
+  .anomaly-medium { background: rgba(251,140,0,0.85); }
+  .anomaly-low    { background: rgba(76,175,80,0.55); }
+</style>
+
+<div class="container py-4">
+  <div class="d-flex align-items-center mb-4">
+    <h2 class="mb-0 fw-bold">
+      <i class="fas fa-microchip text-primary me-2"></i>ML Engine Monitor
+    </h2>
+    <span class="badge bg-warning text-dark ms-3" style="font-size:0.7rem;">ADMIN ONLY</span>
+  </div>
+
+  <!-- ── Status overview ── -->
+  <div class="ml-card mb-4">
+    <div class="row g-3">
+      <div class="col-md-3 col-6">
+        <div class="ml-stat">
+          <div class="label">Active Version</div>
+          <div class="value" id="mlVersion" style="font-size:1.1rem;">—</div>
+          <div class="sub" id="mlLoadedAt">—</div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="ml-stat">
+          <div class="label">R² Score</div>
+          <div class="value text-success" id="mlR2">—</div>
+          <div class="sub">cross-validation</div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="ml-stat">
+          <div class="label">Training Rows</div>
+          <div class="value" id="mlRows">—</div>
+          <div class="sub" id="mlTrees">— trees</div>
+        </div>
+      </div>
+      <div class="col-md-3 col-6">
+        <div class="ml-stat">
+          <div class="label">Cache Hit Rate</div>
+          <div class="value text-primary" id="mlCacheRate">—</div>
+          <div class="sub" id="mlCacheSize">— entries</div>
+        </div>
+      </div>
+
+      <div class="col-md-4 col-6">
+        <div class="ml-stat">
+          <div class="label">Known Areas</div>
+          <div class="value text-warning" id="mlAreas">—</div>
+          <div class="sub">Property types: <span id="mlTypes">—</span></div>
+        </div>
+      </div>
+      <div class="col-md-4 col-6">
+        <div class="ml-stat">
+          <div class="label">Confirmed Sales</div>
+          <div class="value text-info" id="mlConfirmed">—</div>
+          <div class="sub" id="mlAccuracy">Avg accuracy: —</div>
+        </div>
+      </div>
+      <div class="col-md-4 col-6">
+        <div class="ml-stat">
+          <div class="label">Anomalies Flagged</div>
+          <div class="value text-danger" id="mlAnomalies">—</div>
+          <div class="sub">flagged listings</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 d-flex flex-wrap gap-2">
+      <button class="ml-btn" id="btnRetrain">
+        <i class="fas fa-redo me-1"></i>Trigger Retrain
+      </button>
+      <button class="ml-btn danger" id="btnRollback" disabled>
+        <i class="fas fa-undo me-1"></i>Rollback to Previous
+      </button>
+      <button class="ml-btn" onclick="loadAll()">
+        <i class="fas fa-sync me-1"></i>Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Training history ── -->
+  <div class="row g-3">
+    <div class="col-md-7">
+      <div class="ml-card">
+        <div class="ml-stat" style="margin-bottom:14px;">
+          <div class="label">Training History (last 10)</div>
+        </div>
+        <div id="historyList">Loading...</div>
+      </div>
+    </div>
+
+    <div class="col-md-5">
+      <div class="ml-card">
+        <div class="ml-stat" style="margin-bottom:14px;">
+          <div class="label">Anomalous Listings (last 10)</div>
+        </div>
+        <div id="anomaliesList">Loading...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let _previousVersionId = null;
+
+async function loadAll() {
+  await Promise.all([loadStatus(), loadHistory(), loadAccuracy(), loadAnomalies()]);
+}
+
+async function loadStatus() {
+  try {
+    const r = await fetch('/api/ml/status').then(r => r.json());
+    document.getElementById('mlVersion').textContent  = r.version || '—';
+    document.getElementById('mlLoadedAt').textContent =
+      r.loaded_at ? new Date(r.loaded_at).toLocaleString() : '—';
+    document.getElementById('mlR2').textContent       = r.r2_score ? r.r2_score.toFixed(4) : '—';
+    document.getElementById('mlRows').textContent     = (r.rows_count || 0).toLocaleString();
+    document.getElementById('mlTrees').textContent    = (r.trees || 0) + ' trees';
+    document.getElementById('mlCacheRate').textContent= (r.cache_hit_rate || 0) + '%';
+    document.getElementById('mlCacheSize').textContent= (r.cache_size || 0) + ' entries';
+    document.getElementById('mlAreas').textContent    = r.known_areas || 0;
+    document.getElementById('mlTypes').textContent    = r.known_types || 0;
+  } catch (e) { console.error(e); }
+}
+
+async function loadHistory() {
+  try {
+    const list = await fetch('/api/ml/history').then(r => r.json());
+    const el = document.getElementById('historyList');
+    if (!list || !list.length) {
+      el.innerHTML = '<div class="text-muted small">No training runs yet.</div>';
+      return;
+    }
+    // Find previous version (second-most-recent that was deployed)
+    const deployed = list.filter(h => h.deployed);
+    _previousVersionId = deployed[1]?.id || null;
+    document.getElementById('btnRollback').disabled = !_previousVersionId;
+
+    el.innerHTML = list.slice(0, 10).map(h => `
+      <div class="history-row ${h.is_active ? 'active' : ''}">
+        <div>
+          ${h.is_active ? '⭐' : '  '}
+          <strong>${h.version}</strong>
+          <span class="text-muted ms-2" style="font-size:0.75em;">
+            ${new Date(h.trained_at).toLocaleDateString()}
+          </span>
+        </div>
+        <div style="font-size:0.78rem;">
+          R²=<strong style="color:#81c784;">${(h.r2_score||0).toFixed(3)}</strong>
+          · ${(h.rows_count||0).toLocaleString()} rows
+          ${h.new_rows ? '· <span style="color:#90caf9;">+' + h.new_rows + ' new</span>' : ''}
+          · ${h.trigger}
+        </div>
+      </div>
+    `).join('');
+  } catch (e) { console.error(e); }
+}
+
+async function loadAccuracy() {
+  try {
+    const a = await fetch('/api/ml/accuracy').then(r => r.json());
+    document.getElementById('mlConfirmed').textContent = a.confirmed_count || 0;
+    document.getElementById('mlAccuracy').textContent =
+      a.avg_error_pct !== null && a.avg_error_pct !== undefined
+        ? `Avg error: ${a.avg_error_pct}%`
+        : 'No data yet';
+  } catch (e) { console.error(e); }
+}
+
+async function loadAnomalies() {
+  try {
+    // Use a simple property search — admin may add a dedicated endpoint later
+    const props = await fetch('/api/properties?flagged=1').then(r => r.json()).catch(() => []);
+    const el = document.getElementById('anomaliesList');
+    if (!props || !props.length || !Array.isArray(props)) {
+      el.innerHTML = '<div class="text-muted small">No anomalies flagged. 👍</div>';
+      document.getElementById('mlAnomalies').textContent = '0';
+      return;
+    }
+    const flagged = props.filter(p => p.flagged_anomaly);
+    document.getElementById('mlAnomalies').textContent = flagged.length;
+    el.innerHTML = flagged.slice(0, 10).map(p => `
+      <div class="anomaly-row anomaly-${p.anomaly_severity || 'low'}">
+        <strong>#${p.id} · ${p.title || p.location}</strong>
+        <div style="font-size:0.78rem; opacity:0.9; margin-top:3px;">
+          ${p.anomaly_reason || 'Flagged for review'}
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    document.getElementById('anomaliesList').innerHTML =
+      '<div class="text-muted small">Could not load anomalies.</div>';
+  }
+}
+
+document.getElementById('btnRetrain').addEventListener('click', async () => {
+  if (!confirm('Trigger a full ML retrain now? This may take 30-60 seconds.')) return;
+  const btn = document.getElementById('btnRetrain');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Training...';
+  try {
+    const r = await fetch('/api/ml/retrain', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ force: true }),
+    }).then(r => r.json());
+    alert(`Result: ${r.status}\nR²: ${r.r2?.toFixed(4) || '—'}\nVersion: ${r.version || '—'}`);
+    loadAll();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-redo me-1"></i>Trigger Retrain';
+  }
+});
+
+document.getElementById('btnRollback').addEventListener('click', async () => {
+  if (!_previousVersionId) return;
+  if (!confirm('Rollback to the previous model version?')) return;
+  try {
+    const r = await fetch('/api/ml/rollback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ history_id: _previousVersionId }),
+    }).then(r => r.json());
+    alert(r.status === 'rolled_back' ? '✅ Rolled back' : 'Error: ' + (r.error || 'unknown'));
+    loadAll();
+  } catch (e) { alert('Error: ' + e.message); }
+});
+
+loadAll();
+setInterval(loadAll, 60000);  // refresh every minute
+</script>
+{% endblock %}

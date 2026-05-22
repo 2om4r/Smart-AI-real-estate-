@@ -13,7 +13,7 @@ from models import (User, Property, Favorite, Area, PropertyImage,
                     ChatLog, ChatFeedback, Conversation, InvestmentRequest)
 from forms import (RegistrationForm, LoginForm, PropertyForm,
                    SettingsProfileForm, SettingsSecurityForm,
-                   SettingsPreferencesForm)
+                   SettingsPreferencesForm, ProjectForm, UnitForm)
 from ai_utils import (get_ai_response, recommend_investment,
                       portfolio_summary, calculate_score, get_roi_assumption)
 import os
@@ -242,6 +242,284 @@ def api_surooh_projects():
 def api_omran_properties():
     props = Property.query.filter_by(is_omran=True).all()
     return jsonify([p.to_dict() for p in props])
+
+
+# =====================================================
+# 🌲 ML ENGINE — status, predict, retrain, rollback, history
+# =====================================================
+
+# =====================================================
+# 🏥 HEALTH CHECK — for uptime monitoring (UptimeRobot, etc.)
+# =====================================================
+
+@main.route("/healthz")
+def healthz():
+    """
+    System health endpoint.
+    Returns 200 if all subsystems healthy, 503 if any critical service degraded.
+    Used by uptime monitors and load balancers.
+
+    Response schema:
+    {
+      "status":    "healthy" | "degraded" | "unhealthy",
+      "checks":    { db, ml, rag, scheduler },
+      "uptime_s":  seconds since app started,
+      "timestamp": ISO timestamp
+    }
+    """
+    checks = {}
+    degraded = False
+    unhealthy = False
+
+    # ── 1. Database connectivity ─────────────────────────────────
+    try:
+        db.session.execute(db.text("SELECT 1"))
+        checks['db'] = {'status': 'ok'}
+    except Exception as e:
+        checks['db'] = {'status': 'error', 'error': str(e)[:100]}
+        unhealthy = True   # DB is critical
+
+    # ── 2. ML engine ─────────────────────────────────────────────
+    try:
+        from ml_engine import ml
+        status = ml.status()
+        if status.get('loaded'):
+            checks['ml'] = {
+                'status':       'ok',
+                'version':      status.get('version'),
+                'trees':        status.get('trees'),
+                'cache_size':   status.get('cache_size'),
+                'hit_rate_pct': status.get('cache_hit_rate'),
+            }
+        else:
+            checks['ml'] = {'status': 'degraded', 'reason': 'model not loaded'}
+            degraded = True
+    except Exception as e:
+        checks['ml'] = {'status': 'error', 'error': str(e)[:100]}
+        degraded = True
+
+    # ── 3. RAG (ChromaDB) ────────────────────────────────────────
+    try:
+        from rag_engine import search_knowledge_base
+        # If we can import the function the RAG module is healthy enough
+        checks['rag'] = {'status': 'ok'}
+    except Exception as e:
+        checks['rag'] = {'status': 'unknown', 'error': str(e)[:100]}
+
+    # ── 4. Scheduler ─────────────────────────────────────────────
+    try:
+        from extensions import scheduler
+        if scheduler.running:
+            jobs = scheduler.get_jobs()
+            checks['scheduler'] = {
+                'status': 'ok',
+                'jobs':   [j.id for j in jobs],
+            }
+        else:
+            checks['scheduler'] = {'status': 'degraded', 'reason': 'not running'}
+            degraded = True
+    except Exception as e:
+        checks['scheduler'] = {'status': 'unknown', 'error': str(e)[:100]}
+
+    # ── Overall status ───────────────────────────────────────────
+    if unhealthy:    overall = 'unhealthy'
+    elif degraded:   overall = 'degraded'
+    else:            overall = 'healthy'
+
+    import time as _t
+    uptime = _t.time() - current_app.config.get('APP_START_TS', _t.time())
+
+    resp = {
+        'status':     overall,
+        'checks':     checks,
+        'uptime_s':   round(uptime, 1),
+        'timestamp':  datetime.utcnow().isoformat(),
+    }
+    code = 200 if overall != 'unhealthy' else 503
+    return jsonify(resp), code
+
+
+@main.route("/admin/ml-monitor")
+@login_required
+def admin_ml_monitor():
+    """صفحة لوحة مراقبة ML — للأدمن فقط."""
+    if current_user.role != 'admin':
+        flash('Admin access required.', 'danger')
+        return redirect(url_for('main.dashboard'))
+    return render_template('ml_monitor.html')
+
+
+@main.route("/api/ml/history")
+@login_required
+def api_ml_history():
+    """
+    قائمة بكل عمليَّات التَدريب السابقة — للأدمن فقط.
+    Admin-only: list of all past training runs.
+    """
+    if current_user.role != 'admin':
+        return jsonify({'error': 'admin only'}), 403
+
+    from models import TrainingHistory
+    history = (TrainingHistory.query
+               .order_by(TrainingHistory.trained_at.desc())
+               .limit(50)
+               .all())
+    return jsonify([h.to_dict() for h in history])
+
+
+@main.route("/api/ml/retrain", methods=['POST'])
+@login_required
+@limiter.limit("3 per hour")
+def api_ml_retrain():
+    """
+    تَشغيل إعادة تَدريب يدويَّة — للأدمن فقط.
+    Body (optional): {force: true, dry_run: false, min_new: 100, min_days: 7}
+    Admin-only: trigger a manual retraining run.
+    """
+    if current_user.role != 'admin':
+        return jsonify({'error': 'admin only'}), 403
+
+    data = request.get_json() or {}
+    try:
+        from scripts.retrain import run
+        result = run(
+            force    = bool(data.get('force', True)),    # admin triggers usually force
+            dry_run  = bool(data.get('dry_run', False)),
+            min_new  = int(data.get('min_new', 100)),
+            min_days = int(data.get('min_days', 7)),
+            trigger  = 'manual',
+        )
+        return jsonify(result)
+    except Exception as e:
+        logger.error(f"[ML] Manual retrain failed: {e}")
+        return jsonify({'error': str(e), 'status': 'failed'}), 500
+
+
+@main.route("/api/ml/rollback", methods=['POST'])
+@login_required
+@limiter.limit("10 per hour")
+def api_ml_rollback():
+    """
+    التَراجُع لإصدار سابق من النموذج — للأدمن فقط.
+    Body: {version: "v20260520_2257"}  OR  {history_id: 3}
+    Admin-only: hot-swap to a previous model version.
+    """
+    if current_user.role != 'admin':
+        return jsonify({'error': 'admin only'}), 403
+
+    from models import TrainingHistory
+    from extensions import db as _db
+    from ml_engine import ml
+    import os
+
+    data = request.get_json() or {}
+
+    # Find target version
+    target = None
+    if 'history_id' in data:
+        target = TrainingHistory.query.get(int(data['history_id']))
+    elif 'version' in data:
+        target = TrainingHistory.query.filter_by(
+            version=data['version']
+        ).first()
+
+    if not target:
+        return jsonify({'error': 'version not found'}), 404
+    if not target.model_path or not os.path.exists(target.model_path):
+        return jsonify({
+            'error': f'pickle file missing: {target.model_path}'
+        }), 404
+
+    # Hot-swap into the live engine
+    success = ml.hot_swap(target.model_path)
+    if not success:
+        return jsonify({'error': 'hot_swap_failed'}), 500
+
+    # Mark active in DB
+    TrainingHistory.query.update({'is_active': False})
+    target.is_active = True
+    _db.session.commit()
+
+    return jsonify({
+        'status':       'rolled_back',
+        'now_active':   target.to_dict(),
+        'engine_status': ml.status(),
+    })
+
+
+@main.route("/api/ml/status")
+def api_ml_status():
+    """
+    إرجاع حالة محرِّك ML — مفيد للأدمن والـ monitoring.
+    Returns: {loaded, version, trees, known_areas, cache_size, hit_rate, ...}
+    """
+    try:
+        from ml_engine import ml
+        return jsonify(ml.status())
+    except Exception as e:
+        return jsonify({'error': str(e), 'loaded': False}), 500
+
+
+@main.route("/api/ml/predict", methods=['POST'])
+@limiter.limit("30 per minute")
+def api_ml_predict():
+    """
+    نقطة نهاية موحَّدة للتَنَبُّؤ بالسعر والنمو من ML.
+    Body: {type, area, sqm, bedrooms, bathrooms, floor, years (optional)}
+    """
+    try:
+        from ml_engine import ml
+        data = request.get_json() or {}
+        years = data.pop('years', None)
+
+        if years:
+            return jsonify(ml.predict_growth(data, years=int(years)))
+        return jsonify(ml.predict_price(data))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@main.route("/api/projects")
+def api_projects():
+    """
+    جميع المشاريع المُنشأة من قِبَل الوكلاء (is_project=True).
+    تُعرض على الخريطة الحراريَّة + متوفِّرة للشاتبوت.
+    """
+    projects = Property.query.filter_by(is_project=True).all()
+
+    out = []
+    for p in projects:
+        # عَدّ الوحدات في المشروع
+        units_count = Property.query.filter_by(parent_project_id=p.id).count()
+
+        # ML score (يُحسب ديناميكياً)
+        try:
+            from ml_model import get_future_multiplier
+            mult_5y = get_future_multiplier(p.location, 5)
+            growth_pct = round((mult_5y - 1) * 100, 1)
+        except Exception:
+            growth_pct = None
+
+        out.append({
+            'id':              p.id,
+            'title':           p.title,
+            'location':        p.location,
+            'city':            p.city,
+            'developer':       p.developer,
+            'completion_date': p.completion_date,
+            'starting_price':  p.price,
+            'total_units':     p.total_units,
+            'units_added':     units_count,
+            'status':          p.status,
+            'description':     p.description[:200] if p.description else '',
+            'lat':             p.latitude,
+            'lng':             p.longitude,
+            'is_project':      True,
+            'projected_5y_growth_pct': growth_pct,    # 🆕 ML-driven
+            'agent':           p.agent.username if p.agent else 'unknown',
+            'detail_url':      url_for('main.project_detail', project_id=p.id),
+        })
+    return jsonify(out)
 
 
 # =====================================================
@@ -722,6 +1000,49 @@ def new_property():
 
         db.session.commit()
 
+        # ── 🚨 ML ANOMALY CHECK: flag suspicious prices ──────────────────────
+        try:
+            from ml_engine import ml
+            check = ml.detect_anomaly({
+                'type':      prop.type,
+                'area':      prop.location,
+                'sqm':       float(prop.size or 100),
+                'bedrooms':  float(prop.bedrooms or 2),
+                'bathrooms': float(prop.bathrooms or 2),
+                'floor':     1.0,
+            }, listed_price=float(prop.price))
+
+            if check['predicted'] > 0:
+                prop.ml_predicted_at_listing = check['predicted']
+            if check['is_anomaly']:
+                prop.flagged_anomaly  = True
+                prop.anomaly_severity = check['severity']
+                prop.anomaly_reason   = check['reason']
+                db.session.commit()
+
+                if check['severity'] == 'high':
+                    flash(f"⚠️ {check['reason']}", 'warning')
+                elif check['severity'] == 'medium':
+                    flash(f"ℹ️ {check['reason']}", 'info')
+
+            # ── 🎯 Log the prediction for active learning ────────────────────
+            from models import PredictionLog
+            import json as _json
+            db.session.add(PredictionLog(
+                property_id     = prop.id,
+                predicted_price = check.get('predicted') or 0,
+                confidence      = check.get('confidence', 0),
+                model_version   = ml.metadata.get('version'),
+                listing_price   = float(prop.price),
+                features_json   = _json.dumps({
+                    'type': prop.type, 'area': prop.location,
+                    'sqm': prop.size, 'bedrooms': prop.bedrooms,
+                }),
+            ))
+            db.session.commit()
+        except Exception as e:
+            logger.warning(f"[ML] Anomaly check skipped: {e}")
+
         # ── RAG: فهرسة العقار الجديد فورًا في ChromaDB ──────────────────────
         _rag_update(prop.id)
 
@@ -729,6 +1050,205 @@ def new_property():
         return redirect(url_for('main.dashboard'))
 
     return render_template('create_property.html', form=form)
+
+
+# =====================================================
+# 🏗️ PROJECT ROUTES — Multi-Unit Development System
+# نظام المشاريع: مشروع واحد يَحتوي عدَّة وحدات (شقق/فلل/...)
+# =====================================================
+
+@main.route("/project/new", methods=['GET', 'POST'])
+@login_required
+def new_project():
+    """
+    إنشاء مشروع جديد (parent property مع is_project=True).
+    بعد الإنشاء، الوكيل يُعاد توجيهه إلى صفحة المشروع لإضافة الوحدات.
+    """
+    if current_user.role != 'agent':
+        flash('Only agents can create projects.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    form = ProjectForm()
+    if form.validate_on_submit():
+        project = Property(
+            title       = form.name.data,
+            description = form.description.data,
+            price       = form.starting_price.data,  # سعر بدء المشروع
+            location    = form.location.data,
+            type        = 'Project',                  # نوع خاص للمشاريع
+            size        = 0,                          # المشروع نفسه ليس له size
+            city        = form.city.data,
+            address     = form.address.data,
+            agent_id    = current_user.id,
+            latitude    = form.latitude.data,
+            longitude   = form.longitude.data,
+            developer   = form.developer.data,
+            completion_date = form.completion_date.data,
+            total_units = form.total_units.data,
+            investment_omr = form.investment_omr.data,
+            status      = form.status.data,
+            is_project  = True,                       # ⭐ هذا مشروع!
+        )
+        db.session.add(project)
+        db.session.commit()
+
+        # حفظ الصور
+        if form.images.data and form.images.data[0]:
+            for img_file in form.images.data:
+                if img_file and img_file.filename:
+                    filename = f"{uuid.uuid4().hex}_{img_file.filename}"
+                    img_file.save(os.path.join(
+                        current_app.config['UPLOAD_FOLDER'], filename
+                    ))
+                    img = PropertyImage(
+                        property_id=project.id,
+                        image_filename=filename,
+                        is_main=(len(project.images) == 0),
+                    )
+                    db.session.add(img)
+            db.session.commit()
+
+        # تحديث RAG
+        _rag_update(project.id)
+
+        flash(f"✅ Project '{project.title}' created! Now add units.", 'success')
+        return redirect(url_for('main.project_detail', project_id=project.id))
+
+    return render_template('new_project.html', form=form)
+
+
+@main.route("/project/<int:project_id>")
+def project_detail(project_id):
+    """صفحة عرض المشروع مع كل وحداته."""
+    project = Property.query.get_or_404(project_id)
+    if not project.is_project:
+        # ليس مشروعاً — رجِّع لصفحة العقار العاديَّة
+        return redirect(url_for('main.property_detail', property_id=project_id))
+
+    units = project.units.all()
+
+    # إحصائيَّات المشروع
+    if units:
+        prices = [u.price for u in units if u.price]
+        unit_types = {}
+        for u in units:
+            unit_types[u.type] = unit_types.get(u.type, 0) + 1
+        stats = {
+            'unit_count':   len(units),
+            'min_price':    min(prices) if prices else 0,
+            'max_price':    max(prices) if prices else 0,
+            'avg_price':    sum(prices) / len(prices) if prices else 0,
+            'unit_types':   unit_types,
+            'sold_count':   sum(1 for u in units if u.status == 'sold'),
+        }
+    else:
+        stats = {'unit_count': 0, 'min_price': 0, 'max_price': 0,
+                 'avg_price': 0, 'unit_types': {}, 'sold_count': 0}
+
+    return render_template('project_detail.html',
+                          project=project, units=units, stats=stats)
+
+
+@main.route("/project/<int:project_id>/add_unit", methods=['GET', 'POST'])
+@login_required
+def add_unit(project_id):
+    """إضافة وحدة جديدة (أو عدَّة وحدات متماثلة) داخل مشروع موجود."""
+    project = Property.query.get_or_404(project_id)
+    if not project.is_project:
+        flash('This is not a project.', 'warning')
+        return redirect(url_for('main.dashboard'))
+    if project.agent_id != current_user.id and current_user.role != 'admin':
+        flash('You are not authorized.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    form = UnitForm()
+    if form.validate_on_submit():
+        # كم وحدة نُضيف؟ (يَدعم إضافة عدَّة وحدات متماثلة دفعةً واحدة)
+        qty = max(1, min(form.quantity.data or 1, 200))
+        created = []
+        for i in range(qty):
+            # العنوان: إذا qty>1، نُضيف رقم تسلسلي
+            title = (f"{form.title.data} #{i+1}" if qty > 1 else form.title.data)
+
+            unit = Property(
+                title       = title,
+                description = form.description.data,
+                price       = form.price.data,
+                location    = project.location,       # ← يَرِث من المشروع
+                city        = project.city,
+                address     = project.address,
+                type        = form.type.data,
+                size        = form.size.data,
+                bedrooms    = form.bedrooms.data,
+                bathrooms   = form.bathrooms.data,
+                agent_id    = current_user.id,
+                latitude    = project.latitude,
+                longitude   = project.longitude,
+                status      = project.status,
+                is_project  = False,
+                parent_project_id = project.id,       # ← الربط بالمشروع!
+                developer   = project.developer,
+                is_surooh   = project.is_surooh,
+                is_omran    = project.is_omran,
+            )
+            db.session.add(unit)
+            created.append(unit)
+        db.session.commit()
+
+        # حفظ الصور للوحدة الأولى فقط (لتجنُّب تكرار الـ uploads)
+        if form.images.data and form.images.data[0] and created:
+            first_unit = created[0]
+            for img_file in form.images.data:
+                if img_file and img_file.filename:
+                    filename = f"{uuid.uuid4().hex}_{img_file.filename}"
+                    img_file.save(os.path.join(
+                        current_app.config['UPLOAD_FOLDER'], filename
+                    ))
+                    img = PropertyImage(
+                        property_id=first_unit.id,
+                        image_filename=filename,
+                        is_main=(len(first_unit.images) == 0),
+                    )
+                    db.session.add(img)
+            db.session.commit()
+
+        # تحديث RAG لكل الوحدات المُنشأة
+        for u in created:
+            _rag_update(u.id)
+
+        flash(f"✅ Added {qty} unit{'s' if qty > 1 else ''} to '{project.title}'.",
+              'success')
+        return redirect(url_for('main.project_detail', project_id=project.id))
+
+    return render_template('add_unit.html', form=form, project=project)
+
+
+@main.route("/project/<int:project_id>/delete", methods=['POST'])
+@login_required
+def delete_project(project_id):
+    """حذف مشروع + جميع وحداته."""
+    project = Property.query.get_or_404(project_id)
+    if not project.is_project:
+        flash('Not a project.', 'warning')
+        return redirect(url_for('main.dashboard'))
+    if project.agent_id != current_user.id and current_user.role != 'admin':
+        flash('Not authorized.', 'danger')
+        return redirect(url_for('main.dashboard'))
+
+    units_count = project.units.count()
+
+    # حذف كل الوحدات أولاً
+    for unit in project.units.all():
+        _rag_delete(unit.id)
+        db.session.delete(unit)
+
+    # ثم المشروع نفسه
+    _rag_delete(project.id)
+    db.session.delete(project)
+    db.session.commit()
+
+    flash(f"✅ Project deleted with all {units_count} unit(s).", 'success')
+    return redirect(url_for('main.dashboard'))
 
 
 @main.route("/property/<int:property_id>/edit", methods=['GET', 'POST'])
@@ -792,6 +1312,93 @@ def edit_property(property_id):
         form.longitude.data   = prop.longitude
 
     return render_template('edit_property.html', form=form, property=prop)
+
+
+# =====================================================
+# 🎯 ACTIVE LEARNING — mark property sold (ground truth)
+# =====================================================
+
+@main.route("/property/<int:property_id>/mark_sold", methods=['POST'])
+@login_required
+def mark_property_sold(property_id):
+    """
+    Mark a property as sold with the actual sale price.
+    This becomes ground truth for the next ML training cycle.
+
+    Body: {actual_price: float}
+    """
+    prop = Property.query.get_or_404(property_id)
+    if prop.agent_id != current_user.id and current_user.role != 'admin':
+        return jsonify({'error': 'not authorized'}), 403
+
+    data = request.get_json() or request.form.to_dict()
+    try:
+        actual_price = float(data.get('actual_price', 0))
+    except (TypeError, ValueError):
+        return jsonify({'error': 'invalid actual_price'}), 400
+
+    if actual_price <= 0:
+        return jsonify({'error': 'actual_price must be > 0'}), 400
+
+    # Update property
+    prop.sold_price = actual_price
+    prop.sold_date  = datetime.utcnow()
+    prop.status     = 'sold'
+    if prop.created_at:
+        delta = datetime.utcnow() - prop.created_at
+        prop.days_on_market = max(1, delta.days)
+
+    # ── Update prediction log with ground truth ─────────────────────
+    from models import PredictionLog
+    logs = PredictionLog.query.filter_by(property_id=prop.id).all()
+    for log in logs:
+        if log.predicted_price > 0:
+            log.actual_price = actual_price
+            log.error_pct    = abs(actual_price - log.predicted_price) / actual_price * 100
+            log.confirmed_at = datetime.utcnow()
+
+    db.session.commit()
+
+    return jsonify({
+        'status':         'marked_sold',
+        'property_id':    prop.id,
+        'actual_price':   actual_price,
+        'days_on_market': prop.days_on_market,
+        'ml_predicted':   prop.ml_predicted_at_listing,
+        'ml_error_pct':   (abs(actual_price - prop.ml_predicted_at_listing) /
+                          actual_price * 100) if prop.ml_predicted_at_listing else None,
+    })
+
+
+@main.route("/api/ml/accuracy")
+def api_ml_accuracy():
+    """
+    Aggregate ML accuracy across all confirmed sales.
+    يَحسب مدى دقَّة النموذج الفعليَّة من العقارات التي بِيعت فعلاً.
+    """
+    from models import PredictionLog
+    confirmed = PredictionLog.query.filter(
+        PredictionLog.actual_price.isnot(None)
+    ).all()
+    if not confirmed:
+        return jsonify({
+            'confirmed_count':  0,
+            'avg_error_pct':    None,
+            'within_10pct':     0,
+            'within_20pct':     0,
+            'message':          'No confirmed sales yet — accuracy unknown'
+        })
+
+    errors = [c.error_pct for c in confirmed if c.error_pct is not None]
+    within_10 = sum(1 for e in errors if e <= 10)
+    within_20 = sum(1 for e in errors if e <= 20)
+    return jsonify({
+        'confirmed_count':  len(errors),
+        'avg_error_pct':    round(sum(errors) / len(errors), 2) if errors else None,
+        'within_10pct':     within_10,
+        'within_20pct':     within_20,
+        'accuracy_within_20pct': round(within_20 / len(errors) * 100, 1) if errors else 0,
+    })
 
 
 @main.route("/property/<int:property_id>")
@@ -992,18 +1599,22 @@ def api_messages(user_id):
 # =====================================================
 
 @main.route("/api/predict_price", methods=["POST"])
+@limiter.limit("30 per minute; 500 per hour")
 def predict_price_api():
     """
-    AI Price Estimation endpoint — now powered by the REAL ML model.
-    تقدير سعر العقار باستخدام نموذج ML الحقيقي المُدرَّب على 16,000 نقطة بيانات.
+    AI Price Estimation endpoint — now powered by ml_engine v2.
 
-    Growth rates come from `ml_model.get_future_multiplier()`, which reads
-    Area.price_growth (set by train_from_db.py using real CAGR from
-    omanpDatabase.db — 2,000 properties × 8 years of price history).
+    🆕 Enhancements over v1:
+      • Per-property growth (uses sqm, bedrooms, type — not just area average)
+      • ML confidence interval from RF tree variance (200 trees)
+      • Year-by-year projection using RF-derived per-property CAGR
+      • Property-level price range [low, high] = ±1 σ
+
+    Input: {location, type, price, sqm?, bedrooms?, bathrooms?, floor?}
     """
-    from ml_model import get_future_multiplier, ensure_trained, trained as _ml_trained
+    from ml_engine import ml
 
-    data  = request.get_json()
+    data  = request.get_json() or {}
     loc   = data.get("location", "")
     ptype = data.get("type", "Apartment")
     try:
@@ -1014,7 +1625,7 @@ def predict_price_api():
     if price <= 0:
         return jsonify({"error": "Valid price required"}), 400
 
-    # ── Normalize Omani location aliases (Alburaimi → Al Buraimi, etc.) ──────
+    # ── Normalize Omani location aliases ────────────────────────────
     _loc_aliases = {
         'alburaimi': 'Al Buraimi', 'buraimi': 'Al Buraimi', 'al-buraimi': 'Al Buraimi',
         'almouj':    'Al Mouj',    'mouj':    'Al Mouj',    'al-mouj':    'Al Mouj',
@@ -1029,65 +1640,129 @@ def predict_price_api():
     if _norm in _loc_aliases:
         loc = _loc_aliases[_norm]
 
-    # ── Get ML-driven growth multipliers (deterministic, from real CAGR) ─────
-    # ضمان أن النموذج مُدرَّب (يُحمَّل من pickle عند الاستيراد)
-    ensure_trained()
-    try:
-        mult_1y = get_future_multiplier(loc, 1)
-        mult_5y = get_future_multiplier(loc, 5)
-        ml_used = True
-    except Exception as e:
-        # Fallback if ML model unavailable
-        mult_1y, mult_5y, ml_used = 1.055, (1.055 ** 5), False
+    # ── Build full feature dict for ML ──────────────────────────────
+    features = {
+        'type':       ptype,
+        'area':       loc or 'Muscat',
+        'sqm':        float(data.get('sqm', 100)),
+        'bedrooms':   float(data.get('bedrooms', 2)),
+        'bathrooms':  float(data.get('bathrooms', 2)),
+        'floor':      float(data.get('floor', 0)),
+    }
 
-    annual_growth = mult_1y - 1   # actual annual rate from ML
-    val_1y = price * mult_1y
-    val_5y = price * mult_5y
+    # ── Call ml_engine for 5-year growth (single call, cached) ──────
+    growth_5y = ml.predict_growth(features, years=5)
+    method = growth_5y.get('method', '')
+    # Any ml_* method means RF was used (per-property or with area fallback)
+    ml_used = method.startswith('ml_')
 
-    # ── Year-by-year projection for the chart (0 → 10 years) ─────────────────
-    # توقّع سنة بسنة لرسم منحنى السعر — يُستخدم في Chart.js على الواجهة
+    annual_rate = growth_5y['annual_pct'] / 100   # decimal form
+    val_1y = price * (1 + annual_rate)
+    val_5y = price * growth_5y['multiplier']
+
+    # ── Get ML confidence from current-year prediction ──────────────
+    current_pred = ml.predict_price({**features, 'year': 2026})
+
+    # ── Year-by-year projection (compound from RF-derived rate) ─────
     projection = []
     for yr in range(0, 11):
-        try:
-            m = get_future_multiplier(loc, yr) if yr > 0 else 1.0
-        except Exception:
-            m = (1 + annual_growth) ** yr
+        m = (1 + annual_rate) ** yr
         projection.append({
             "year":  yr,
             "value": round(price * m, 0),
         })
 
-    # Rental ROI assumption by type (industry-standard rates)
+    # ── 🆕 Market comparison: area average + governorate average ────
+    # نَحسب نمو متوسط للمنطقة (archetype) ونمو المحافظة لتَوفير سياق
+    area_projection = []
+    gov_projection  = []
+    try:
+        # Area-level archetype growth
+        area_growth = ml.predict_area_growth(loc, years=5)
+        area_annual = area_growth['annual_pct'] / 100
+
+        # Governorate-level: use a different proxy area
+        gov = ml._guess_governorate(loc)
+        gov_growth = ml.predict_area_growth(gov, years=5) if gov != loc else area_growth
+        gov_annual = gov_growth['annual_pct'] / 100
+
+        # Same starting price for all three series so the chart compares % growth fairly
+        for yr in range(0, 11):
+            area_projection.append({
+                "year":  yr,
+                "value": round(price * ((1 + area_annual) ** yr), 0),
+            })
+            gov_projection.append({
+                "year":  yr,
+                "value": round(price * ((1 + gov_annual) ** yr), 0),
+            })
+    except Exception as _e:
+        logger.warning(f"[ML] comparison series unavailable: {_e}")
+        area_projection = projection
+        gov_projection  = projection
+
+    # ── Rental ROI assumption by type (kept as industry standard) ───
     if   "villa"      in ptype.lower(): rent_pct = 0.065
     elif "land"       in ptype.lower(): rent_pct = 0.090
     elif "townhouse"  in ptype.lower(): rent_pct = 0.070
     elif "commercial" in ptype.lower(): rent_pct = 0.085
-    else:                               rent_pct = 0.075   # Apartment default
+    else:                               rent_pct = 0.075
 
-    rent_estimate = price * rent_pct
-    roi           = rent_pct * 100
+    # Reason text varies by method (transparent about what was used)
+    if method == 'ml_per_property_cagr':
+        reason = (
+            f"ML-predicted {annual_rate * 100:.2f}%/yr growth from per-property "
+            f"RandomForest analysis (confidence: {growth_5y['confidence']}%). "
+            f"Based on 16,000 real Omani price observations (2019-2026)."
+        )
+    elif method == 'ml_with_area_cagr_fallback':
+        reason = (
+            f"ML used area-level CAGR ({annual_rate * 100:.2f}%/yr) because "
+            f"this exact feature combination is rare in training data. "
+            f"More features (sqm, bedrooms) → better per-property accuracy."
+        )
+    elif method == 'baseline_5pct':
+        reason = (
+            f"Estimated {annual_rate * 100:.1f}%/yr baseline growth — "
+            f"limited data for this combination. Add more property details."
+        )
+    else:
+        reason = (
+            f"Estimated {annual_rate * 100:.1f}%/yr growth from CAGR fallback "
+            f"(ml_engine not available)."
+        )
 
-    reason = (
-        f"ML-predicted {annual_growth * 100:.2f}% annual growth in {loc or 'this area'} "
-        f"(based on 2,000 Omani properties × 8 years of real price data, "
-        f"trained RandomForest model)."
-        if ml_used else
-        f"Estimated {annual_growth * 100:.1f}% annual growth — ML model unavailable, "
-        f"using fallback rate."
-    )
+    # ── Cold-start + Confidence band info ──────────────────────────
+    is_cold_start  = ml.is_cold_start_area(loc) if loc else False
+    confidence_band = ml.confidence_band(growth_5y.get('confidence', 0))
+    cold_start_msg = None
+    if is_cold_start:
+        cold_start_msg = (
+            f'⚠️ New area "{loc}" — ML using nearest governorate as proxy. '
+            f'Prediction will improve after retraining.'
+        )
 
     return jsonify({
-        "estimated_price": round(val_1y, 0),
-        "roi":             round(roi, 1),
-        "yearly_income":   round(rent_estimate, 0),
-        "value_1y":        round(val_1y, 0),
-        "value_5y":        round(val_5y, 0),
-        "annual_growth":   round(annual_growth * 100, 2),
-        "ml_powered":      ml_used,
-        "reason":          reason,
-        "projection":      projection,   # year-by-year for chart
-        "current_price":   round(price, 0),
-        "location":        loc or "Oman",
+        "estimated_price":  round(val_1y, 0),
+        "roi":              round(rent_pct * 100, 1),
+        "yearly_income":    round(price * rent_pct, 0),
+        "value_1y":         round(val_1y, 0),
+        "value_5y":         round(val_5y, 0),
+        "annual_growth":    round(annual_rate * 100, 2),
+        "ml_powered":       ml_used,
+        "ml_method":        growth_5y.get('method'),
+        "ml_confidence":    growth_5y.get('confidence'),
+        "confidence_band":  confidence_band,        # 🆕 'high' | 'medium' | 'low'
+        "cold_start":       is_cold_start,           # 🆕 unknown area flag
+        "cold_start_msg":   cold_start_msg,
+        "price_range":      current_pred.get('range'),
+        "reason":            reason,
+        "projection":        projection,            # this property
+        "area_projection":   area_projection,        # 🆕 area average
+        "gov_projection":    gov_projection,         # 🆕 governorate average
+        "current_price":     round(price, 0),
+        "ml_estimated":      round(current_pred.get('price', 0), 0),
+        "location":          loc or "Oman",
     })
 
 

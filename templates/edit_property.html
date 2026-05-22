@@ -67,12 +67,37 @@
                     </div>
 
                     <!-- Map Integration -->
+                    <!-- ═══ Interactive Map Picker (Upgraded) ═══ -->
                     <div class="mb-4">
-                        <label class="form-label fw-bold"><i class="fas fa-map-marker-alt text-danger"></i> Location Map</label>
-                        <div id="propertyMap" style="height: 300px; border-radius: 8px; border: 1px solid #dee2e6;"></div>
-                        <div class="form-text mt-2">Click on the map to update the property location.</div>
+                        <label class="form-label fw-bold">
+                            <i class="fas fa-map-marker-alt text-danger me-1"></i>
+                            Location Map
+                        </label>
+
+                        <!-- Search box -->
+                        <div class="input-group mb-2">
+                            <span class="input-group-text"><i class="fas fa-search"></i></span>
+                            <input type="text" id="locSearch" class="form-control"
+                                   placeholder="Search address to update location">
+                            <button type="button" class="btn btn-outline-secondary" id="searchBtn">Find</button>
+                            <button type="button" class="btn btn-outline-info" id="myLocBtn" title="My location">
+                                <i class="fas fa-crosshairs"></i>
+                            </button>
+                        </div>
+
+                        <div id="propertyMap" style="height:340px; border-radius:10px; border:1px solid #dee2e6;"></div>
+
+                        <div class="form-text mt-2 d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-mouse-pointer me-1"></i>
+                                Click map · drag pin to refine
+                            </span>
+                            <span id="coordsDisplay" class="badge bg-light text-dark"
+                                  style="font-family:monospace;">
+                                No location set
+                            </span>
+                        </div>
                     </div>
-                    
+
                     <!-- Hidden fields for coordinates -->
                     <div class="d-none">
                         {{ form.latitude(id="lat_input") }}
@@ -105,43 +130,101 @@
     </div>
 </div>
 
-<!-- Leaflet JS -->
+<!-- Leaflet JS — Upgraded picker (search, drag, geolocation) -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    var latInput = document.getElementById('lat_input');
-    var lngInput = document.getElementById('lng_input');
-    
-    // Default to Muscat if no coordinates are set
-    var lat = latInput.value ? parseFloat(latInput.value) : 23.5880;
-    var lng = lngInput.value ? parseFloat(lngInput.value) : 58.3829;
-    
-    var map = L.map('propertyMap').setView([lat, lng], latInput.value ? 14 : 10);
-    
+    const latInput = document.getElementById('lat_input');
+    const lngInput = document.getElementById('lng_input');
+    const coordsDisplay = document.getElementById('coordsDisplay');
+
+    const initLat = latInput.value ? parseFloat(latInput.value) : 23.5880;
+    const initLng = lngInput.value ? parseFloat(lngInput.value) : 58.3829;
+    const initZoom = latInput.value ? 14 : 9;
+
+    const map = L.map('propertyMap').setView([initLat, initLng], initZoom);
+
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 19,
     }).addTo(map);
-    
-    var marker = null;
-    
-    // If we have existing coordinates
-    if(latInput.value && lngInput.value) {
-        marker = L.marker([lat, lng]).addTo(map);
+
+    let marker = null;
+
+    // Pre-fill if existing coordinates
+    if (latInput.value && lngInput.value) {
+        setMarker(initLat, initLng, null);
     }
-    
-    map.on('click', function(e) {
-        var clickedLat = e.latlng.lat;
-        var clickedLng = e.latlng.lng;
-        
+
+    function setMarker(lat, lng, zoom) {
         if (marker) {
-            marker.setLatLng(e.latlng);
+            marker.setLatLng([lat, lng]);
         } else {
-            marker = L.marker(e.latlng).addTo(map);
+            marker = L.marker([lat, lng], { draggable: true })
+                .addTo(map)
+                .bindTooltip('Drag me to refine', { permanent: false });
+
+            marker.on('dragend', function() {
+                const p = marker.getLatLng();
+                updateCoords(p.lat, p.lng);
+            });
         }
-        
-        latInput.value = clickedLat.toFixed(6);
-        lngInput.value = clickedLng.toFixed(6);
+        if (zoom) map.setView([lat, lng], zoom);
+        updateCoords(lat, lng);
+    }
+
+    function updateCoords(lat, lng) {
+        latInput.value = lat.toFixed(6);
+        lngInput.value = lng.toFixed(6);
+        coordsDisplay.innerHTML =
+            `<i class="fas fa-check-circle text-success me-1"></i>` +
+            `${lat.toFixed(5)}°, ${lng.toFixed(5)}°`;
+        coordsDisplay.classList.remove('bg-light', 'text-dark');
+        coordsDisplay.classList.add('bg-success-subtle', 'text-success');
+    }
+
+    map.on('click', e => setMarker(e.latlng.lat, e.latlng.lng));
+
+    // Search bar
+    const searchBtn = document.getElementById('searchBtn');
+    const searchInput = document.getElementById('locSearch');
+    function doSearch() {
+        const q = searchInput.value.trim();
+        if (!q) return;
+        const url = `https://nominatim.openstreetmap.org/search?` +
+                    `format=json&limit=1&countrycodes=om&q=${encodeURIComponent(q)}`;
+        searchBtn.disabled = true;
+        searchBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        fetch(url, { headers: { 'Accept-Language': 'en' } })
+            .then(r => r.json())
+            .then(res => {
+                if (res && res.length > 0) {
+                    setMarker(parseFloat(res[0].lat), parseFloat(res[0].lon), 15);
+                } else {
+                    alert('No results in Oman.');
+                }
+            })
+            .catch(e => alert('Search failed: ' + e.message))
+            .finally(() => {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = 'Find';
+            });
+    }
+    searchBtn.addEventListener('click', doSearch);
+    searchInput.addEventListener('keypress', e => {
+        if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
     });
+
+    // My location
+    document.getElementById('myLocBtn').addEventListener('click', function() {
+        if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
+        navigator.geolocation.getCurrentPosition(
+            pos => setMarker(pos.coords.latitude, pos.coords.longitude, 16),
+            err => alert('Could not get location: ' + err.message)
+        );
+    });
+
+    setTimeout(() => map.invalidateSize(), 100);
 });
 </script>
 {% endblock %}

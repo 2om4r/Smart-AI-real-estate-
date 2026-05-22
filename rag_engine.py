@@ -88,8 +88,10 @@ def _property_to_text(prop) -> str:
     Serialise a Property ORM instance to a bilingual searchable string.
     تحويل كائن عقار إلى نص قابل للبحث (عربي + إنجليزي).
 
-    الحقول: العنوان، النوع، الموقع، المدينة، السعر، المساحة، الغرف، الوكيل،
-            مشروع صروح، مشروع عمران، الحالة.
+    Handles 3 cases:
+      1. Regular property
+      2. Project (is_project=True) — special multi-unit indexing
+      3. Unit inside a project (parent_project_id set) — links to parent
     """
     agent_name = prop.agent.username if prop.agent else "unknown"
     is_surooh  = "نعم" if prop.is_surooh else "لا"
@@ -100,6 +102,44 @@ def _property_to_text(prop) -> str:
     status     = prop.status   or "available"
     city       = prop.city     or prop.location or ""
 
+    # ── Case 1: PROJECT (is_project=True) — bilingual, detailed ───────────
+    if getattr(prop, 'is_project', False):
+        developer       = prop.developer or "غير محدَّد"
+        completion      = prop.completion_date or "TBD"
+        total_units     = prop.total_units or 0
+        try:
+            units_now = prop.units.count()
+        except Exception:
+            units_now = 0
+
+        return (
+            f"مشروع عقاري: {prop.title} | "
+            f"PROJECT: {prop.title} | "
+            f"المطوِّر: {developer} | DEVELOPER: {developer} | "
+            f"موقع: {prop.location} | LOCATION: {prop.location} | "
+            f"مدينة: {city} | CITY: {city} | "
+            f"سعر البداية: {price} OMR | STARTING PRICE: {price} OMR | "
+            f"إجمالي الوحدات المخطَّطة: {total_units} | TOTAL UNITS PLANNED: {total_units} | "
+            f"الوحدات المتوفِّرة الآن: {units_now} | UNITS AVAILABLE: {units_now} | "
+            f"تاريخ التسليم: {completion} | COMPLETION: {completion} | "
+            f"الحالة: {status} | STATUS: {status} | "
+            f"الوكيل: {agent_name} | AGENT: {agent_name} | "
+            f"نوع: مشروع متعدِّد الوحدات | TYPE: multi-unit development | "
+            f"الوصف: {(prop.description or '')[:300]}"
+        )
+
+    # ── Case 2: UNIT inside a project — link to parent ────────────────────
+    parent_label = ""
+    try:
+        if prop.parent_project_id and prop.parent_project:
+            parent_label = (
+                f" | ضمن مشروع: {prop.parent_project.title}"
+                f" | PART OF PROJECT: {prop.parent_project.title}"
+            )
+    except Exception:
+        pass
+
+    # ── Case 3: Regular property (default) ─────────────────────────────────
     return (
         f"عقار: {prop.title} | "
         f"نوع: {prop.type} | "
@@ -112,6 +152,7 @@ def _property_to_text(prop) -> str:
         f"صروح: {is_surooh} | "
         f"عمران: {is_omran} | "
         f"الحالة: {status}"
+        f"{parent_label}"
     )
 
 

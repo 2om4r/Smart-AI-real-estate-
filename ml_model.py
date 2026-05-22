@@ -158,29 +158,60 @@ def ensure_trained() -> bool:
     return False
 
 
-def get_future_multiplier(location: str, years: int) -> float:
+def get_future_multiplier(location: str, years: int,
+                          property_type: str = "Apartment",
+                          sqm: float = 100,
+                          bedrooms: int = 2,
+                          bathrooms: int = 2) -> float:
     """
-    Return the COMPOUND price multiplier for a location over N years.
-    يُرجع مضاعف النمو المركّب للسعر على عدد السنوات المطلوب.
+    Return the compound price multiplier for a property over N years.
 
-    Example: get_future_multiplier("Muscat", 5) → 1.338
-    Future price = current_price × multiplier
+    🆕 v4 — Delegates to ml_engine.MLEngine.predict_growth()
+    ─────────────────────────────────────────────────────────
+    The ML engine is the single source of truth for growth predictions.
+    Benefits over inline implementation:
+      ✅ Thread-safe (RLock around model)
+      ✅ Cached (TTL 1h — same query → instant)
+      ✅ Per-property CAGR derived from RF (not just area average)
+      ✅ Falls back to CAGR formula only if ml_engine unavailable
 
-    - Backed by Area.price_growth (0-100 scale → 1%-15% annual rate)
-    - Fully DETERMINISTIC — no randomness
-    - Falls back to 5.5% annual rate if area not found
-    بدون عشوائية — حتمي بالكامل. يعطي نفس النتيجة لنفس المدخلات دائماً.
+    Args:
+        location:      area name (e.g. "Muscat", "Al Mouj")
+        years:         years ahead to project
+        property_type: Villa / Apartment / Land / Townhouse / Commercial
+        sqm:           size in square meters
+        bedrooms:      number of bedrooms
+        bathrooms:     number of bathrooms
+
+    Returns:
+        float multiplier — future_price = current_price × multiplier
     """
+    try:
+        from ml_engine import ml
+        if ml._loaded:
+            result = ml.predict_growth({
+                'type':      property_type,
+                'area':      location or 'Muscat',
+                'sqm':       float(sqm),
+                'bedrooms':  float(bedrooms),
+                'bathrooms': float(bathrooms),
+                'floor':     1.0,
+            }, years=years)
+            multiplier = result['multiplier']
+            logger.debug(
+                f"[ml_model] {location} {property_type}: "
+                f"{result['annual_pct']}%/yr × {years}y = ×{multiplier:.4f} "
+                f"(method={result['method']}, conf={result['confidence']}%)"
+            )
+            return round(multiplier, 6)
+    except Exception as e:
+        logger.warning(f"[ml_model] ml_engine unavailable: {e} — falling back to CAGR")
+
+    # ── Legacy CAGR fallback (kept for safety) ──────────────────────
     from models import Area
-
-    annual_rate = 0.055  # معدل افتراضي 5.5% سنوياً
-
+    annual_rate = 0.055
     if location and location.strip():
         area = Area.query.filter(Area.name.ilike(f"%{location}%")).first()
         if area and area.price_growth is not None:
-            # Scale 0-100 → 1%-15% annual growth rate (linear map)
-            # المقياس: 0 → 1%، 100 → 15%
             annual_rate = max(min(0.01 + (area.price_growth / 100.0) * 0.14, 0.15), 0.01)
-
-    # فائدة مركبة: future = current × (1 + r)^n
     return round((1 + annual_rate) ** years, 6)

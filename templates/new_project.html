@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<div class="container py-4" style="max-width: 800px;">
+    <div class="d-flex align-items-center mb-4">
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-sm btn-outline-secondary me-3">
+            <i class="fas fa-arrow-left"></i>
+        </a>
+        <div>
+            <h2 class="mb-0 fw-bold">
+                <i class="fas fa-city text-warning me-2"></i>Create New Project
+            </h2>
+            <p class="text-muted mb-0 small">A project can hold multiple units (apartments, villas, townhouses)</p>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0">
+        <div class="card-body p-4">
+
+            <!-- Info banner -->
+            <div class="alert alert-info border-0" style="background: #E8F4F8; color: #1565C0;">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>What is a project?</strong> A development that holds multiple units —
+                e.g. a residential tower with 50 apartments, or a compound with 30 villas.
+                Add the project info here, then add units inside it.
+            </div>
+
+            <form method="POST" enctype="multipart/form-data" novalidate>
+                {{ form.hidden_tag() }}
+
+                <!-- Project basic info -->
+                <h5 class="fw-bold mt-3 mb-3"><i class="fas fa-building me-2 text-primary"></i>Project Info</h5>
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label fw-semibold">{{ form.name.label }}</label>
+                        {{ form.name(class="form-control", placeholder="e.g. Al Mouj Marina Residences") }}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">{{ form.developer.label }}</label>
+                        {{ form.developer(class="form-control", placeholder="e.g. Tameer Development") }}
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">{{ form.description.label }}</label>
+                        {{ form.description(class="form-control", rows="3",
+                            placeholder="Brief overview of the project, amenities, target audience...") }}
+                    </div>
+                </div>
+
+                <!-- Location -->
+                <h5 class="fw-bold mt-4 mb-3"><i class="fas fa-map-marker-alt me-2 text-danger"></i>Location</h5>
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">{{ form.location.label }}</label>
+                        {{ form.location(class="form-control", placeholder="Muscat / Salalah / Al Mouj") }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">{{ form.city.label }}</label>
+                        {{ form.city(class="form-control", placeholder="City name") }}
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">{{ form.address.label }}</label>
+                        {{ form.address(class="form-control", placeholder="Full address") }}
+                    </div>
+                </div>
+
+                <!-- ═══ Interactive Map Picker ═══ -->
+                <div class="mt-4">
+                    <label class="form-label fw-bold">
+                        <i class="fas fa-map-marker-alt text-danger me-1"></i>
+                        Pin Exact Location on Map
+                        <span class="badge bg-success ms-1" style="font-size:0.65rem;">REQUIRED FOR HEAT MAP</span>
+                    </label>
+
+                    <!-- Search box -->
+                    <div class="input-group mb-2">
+                        <span class="input-group-text"><i class="fas fa-search"></i></span>
+                        <input type="text" id="locSearch" class="form-control"
+                               placeholder="Search address (e.g. 'Al Mouj Muscat')">
+                        <button type="button" class="btn btn-outline-secondary" id="searchBtn">Find</button>
+                        <button type="button" class="btn btn-outline-info" id="myLocBtn" title="Use my current location">
+                            <i class="fas fa-crosshairs"></i>
+                        </button>
+                    </div>
+
+                    <div id="projectMap" style="height:340px; border-radius:10px; border:1px solid #dee2e6;"></div>
+
+                    <div class="form-text mt-2 d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-mouse-pointer me-1"></i>
+                            Click on map to place pin · drag to refine
+                        </span>
+                        <span id="coordsDisplay" class="badge bg-light text-dark"
+                              style="font-family:monospace;">
+                            No location set
+                        </span>
+                    </div>
+
+                    <!-- Hidden lat/lng inputs — populated by map clicks -->
+                    <div class="d-none">
+                        {{ form.latitude(id="lat_input") }}
+                        {{ form.longitude(id="lng_input") }}
+                    </div>
+                </div>
+
+                <!-- Investment metrics -->
+                <h5 class="fw-bold mt-4 mb-3"><i class="fas fa-coins me-2 text-success"></i>Investment Details</h5>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">{{ form.starting_price.label }}</label>
+                        {{ form.starting_price(class="form-control", placeholder="80000") }}
+                        <small class="text-muted">Lowest unit price</small>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">{{ form.total_units.label }}</label>
+                        {{ form.total_units(class="form-control", placeholder="50") }}
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">{{ form.investment_omr.label }}</label>
+                        {{ form.investment_omr(class="form-control", placeholder="5000000") }}
+                    </div>
+
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">{{ form.completion_date.label }}</label>
+                        {{ form.completion_date(class="form-control", placeholder="Q4 2027") }}
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">{{ form.status.label }}</label>
+                        {{ form.status(class="form-select") }}
+                    </div>
+                </div>
+
+                <!-- Images -->
+                <h5 class="fw-bold mt-4 mb-3"><i class="fas fa-images me-2 text-info"></i>Project Images</h5>
+                <div>
+                    {{ form.images(class="form-control") }}
+                    <small class="text-muted">You can select multiple images. JPG/PNG only.</small>
+                </div>
+
+                <!-- Submit -->
+                <div class="d-grid mt-4">
+                    {{ form.submit(class="btn btn-primary btn-lg fw-bold") }}
+                </div>
+
+                <p class="text-center text-muted small mt-3">
+                    <i class="fas fa-arrow-right me-1"></i>
+                    After creating, you'll be taken to the project page to add units.
+                </p>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Leaflet Map Picker ═══ -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Center on Muscat by default
+    const DEFAULT_LAT = 23.5880, DEFAULT_LNG = 58.3829;
+
+    const map = L.map('projectMap').setView([DEFAULT_LAT, DEFAULT_LNG], 9);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
+        maxZoom: 19,
+    }).addTo(map);
+
+    let marker = null;
+    const latInput = document.getElementById('lat_input');
+    const lngInput = document.getElementById('lng_input');
+    const coordsDisplay = document.getElementById('coordsDisplay');
+
+    // ── Pre-fill if form was re-rendered with values ──────────────
+    if (latInput.value && lngInput.value) {
+        const lat = parseFloat(latInput.value);
+        const lng = parseFloat(lngInput.value);
+        setMarker(lat, lng, 13);
+    }
+
+    // ── Place / move marker ───────────────────────────────────────
+    function setMarker(lat, lng, zoom) {
+        if (marker) {
+            marker.setLatLng([lat, lng]);
+        } else {
+            marker = L.marker([lat, lng], { draggable: true })
+                .addTo(map)
+                .bindTooltip('Drag me to refine the location', { permanent: false });
+
+            // Update inputs when marker is dragged
+            marker.on('dragend', function(e) {
+                const p = marker.getLatLng();
+                updateCoords(p.lat, p.lng);
+            });
+        }
+        if (zoom) map.setView([lat, lng], zoom);
+        updateCoords(lat, lng);
+    }
+
+    function updateCoords(lat, lng) {
+        latInput.value = lat.toFixed(6);
+        lngInput.value = lng.toFixed(6);
+        coordsDisplay.innerHTML =
+            `<i class="fas fa-check-circle text-success me-1"></i>` +
+            `${lat.toFixed(5)}°, ${lng.toFixed(5)}°`;
+        coordsDisplay.classList.remove('bg-light', 'text-dark');
+        coordsDisplay.classList.add('bg-success-subtle', 'text-success');
+    }
+
+    // ── Click map to place pin ────────────────────────────────────
+    map.on('click', function(e) {
+        setMarker(e.latlng.lat, e.latlng.lng);
+    });
+
+    // ── Search address (Nominatim — free, no API key) ─────────────
+    const searchBtn = document.getElementById('searchBtn');
+    const searchInput = document.getElementById('locSearch');
+
+    function doSearch() {
+        const q = searchInput.value.trim();
+        if (!q) return;
+
+        // Bias search to Oman for better results
+        const url = `https://nominatim.openstreetmap.org/search?` +
+                    `format=json&limit=1&countrycodes=om&q=${encodeURIComponent(q)}`;
+
+        searchBtn.disabled = true;
+        searchBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+        fetch(url, { headers: { 'Accept-Language': 'en' } })
+            .then(r => r.json())
+            .then(results => {
+                if (results && results.length > 0) {
+                    const r = results[0];
+                    setMarker(parseFloat(r.lat), parseFloat(r.lon), 15);
+                } else {
+                    alert('No results found in Oman. Try a different search term.');
+                }
+            })
+            .catch(err => alert('Search failed: ' + err.message))
+            .finally(() => {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = 'Find';
+            });
+    }
+    searchBtn.addEventListener('click', doSearch);
+    searchInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); doSearch(); }
+    });
+
+    // ── "Use my current location" button ──────────────────────────
+    document.getElementById('myLocBtn').addEventListener('click', function() {
+        if (!navigator.geolocation) {
+            alert('Geolocation not supported by your browser.');
+            return;
+        }
+        navigator.geolocation.getCurrentPosition(
+            pos => setMarker(pos.coords.latitude, pos.coords.longitude, 16),
+            err => alert('Could not get location: ' + err.message)
+        );
+    });
+
+    // ── Form validation: warn if no marker before submit ──────────
+    document.querySelector('form').addEventListener('submit', function(e) {
+        if (!latInput.value || !lngInput.value) {
+            if (!confirm('⚠️ No location pinned on map.\n\n' +
+                         'Your project will NOT appear on the investment heat map.\n\n' +
+                         'Continue anyway?')) {
+                e.preventDefault();
+            }
+        }
+    });
+
+    // Refresh map size after modal/tab open (Bootstrap quirk)
+    setTimeout(() => map.invalidateSize(), 100);
+});
+</script>
+{% endblock %}
