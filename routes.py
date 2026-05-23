@@ -18,8 +18,8 @@ from ai_utils import (get_ai_response, recommend_investment,
                       portfolio_summary, calculate_score, get_roi_assumption)
 import os
 import uuid
-from ml_model import (train_price_model, predict_price,
-                      predict_prices, get_ml_investment_score)
+from ml_engine import ml
+from ml_engine import get_future_multiplier, get_ml_investment_score
 from firebase import db as firebase_db
 
 # ─── Blueprint ────────────────────────────────────────────────────────────────
@@ -795,14 +795,25 @@ def dashboard():
         properties = Property.query.all()
 
         if properties:
-            train_price_model(properties)
-            predictions = predict_prices(properties)
-            for i, p in enumerate(properties):
+            for p in properties:
+                safe_price = p.price or 0
                 p.score = calculate_score({
-                    'type': p.type, 'price': p.price, 'location': p.location
+                    'type': p.type, 'price': safe_price, 'location': p.location
                 })
-                p.predicted_price = predictions[i]
-                p.ml_score        = get_ml_investment_score(p.predicted_price, p.price)
+                # Build feature dict for v2 ML engine
+                feats = {
+                    'type': p.type or 'Unknown',
+                    'governorate': p.city or 'Muscat',
+                    'area': p.location or 'Unknown',
+                    'sqm': p.size or 0,
+                    'bedrooms': getattr(p, 'bedrooms', 2) or 2,
+                    'bathrooms': getattr(p, 'bathrooms', 2) or 2,
+                    'floor': 0,
+                    'year': 2026
+                }
+                pred_res = ml.predict_price(feats)
+                p.predicted_price = pred_res.get('price', 0)
+                p.ml_score        = get_ml_investment_score(p.predicted_price, safe_price)
 
         return render_template('dashboard_admin.html',
                                users=users,

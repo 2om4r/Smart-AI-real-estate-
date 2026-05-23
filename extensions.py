@@ -56,7 +56,7 @@ def init_scheduler(app):
         """Wrapper that runs retrain inside app context."""
         with app.app_context():
             try:
-                from scripts.retrain import run
+                from scripts.ml_pipeline import run
                 result = run(trigger=trigger_source)
                 log.info(f"[Scheduler] {trigger_source} retrain: {result.get('status')}")
             except Exception as e:

@@ -1,5 +1,5 @@
 """
-scripts/retrain.py — Smart Continuous Retraining Pipeline
+scripts/ml_pipeline.py — Smart Continuous Retraining Pipeline
 ==========================================================
 خطّ التَدريب الذكيّ المستمرّ للنموذج — يَجمع البيانات الأصليَّة + الجديدة
 ويُعيد التَدريب فقط عند الحاجة.
@@ -23,13 +23,13 @@ Workflow:
 
 Usage:
     # Auto (cron-friendly — exits if not worthwhile)
-    python scripts/retrain.py
+    python scripts/ml_pipeline.py
 
     # Force retrain regardless of thresholds
-    python scripts/retrain.py --force
+    python scripts/ml_pipeline.py --force
 
     # Dry-run: simulate without saving or hot-swapping
-    python scripts/retrain.py --dry-run
+    python scripts/ml_pipeline.py --dry-run
 
     # Custom threshold (default: 100 new rows or 7 days)
     python scripts/retrain.py --min-new 50 --min-days 3

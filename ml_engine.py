@@ -639,3 +639,49 @@ def init_ml_engine(model_path: Optional[str] = None) -> bool:
     Loads the model from disk into the singleton.
     """
     return ml.load(model_path)
+
+# =============================================================================
+# 🚀 LEGACY ML UTILS (Migrated from ml_model.py)
+# =============================================================================
+
+def get_ml_investment_score(predicted_price, actual_price):
+    if not actual_price or actual_price <= 0:
+        return 50
+    if not predicted_price:
+        predicted_price = 0
+    ratio = predicted_price / actual_price
+    score = 60 + ((ratio - 1.0) * 50)
+    return min(max(round(score), 0), 100)
+
+def ensure_trained() -> bool:
+    '''Auto-train stub migrated from v1. v2 Engine is auto-loaded at startup.'''
+    return ml._loaded
+
+def get_future_multiplier(location: str, years: int,
+                          property_type: str = "Apartment",
+                          sqm: float = 100,
+                          bedrooms: int = 2,
+                          bathrooms: int = 2) -> float:
+    try:
+        if ml._loaded:
+            result = ml.predict_growth({
+                'type':      property_type,
+                'area':      location or 'Muscat',
+                'sqm':       float(sqm),
+                'bedrooms':  float(bedrooms),
+                'bathrooms': float(bathrooms),
+                'floor':     1.0,
+            }, years=years)
+            multiplier = result['multiplier']
+            return round(multiplier, 6)
+    except Exception as e:
+        pass
+
+    # Legacy CAGR fallback
+    from models import Area
+    annual_rate = 0.055
+    if location and location.strip():
+        area = Area.query.filter(Area.name.ilike(f"%{location}%")).first()
+        if area and area.price_growth is not None:
+            annual_rate = max(min(0.01 + (area.price_growth / 100.0) * 0.14, 0.15), 0.01)
+    return round((1 + annual_rate) ** years, 6)

@@ -194,7 +194,7 @@ def recommend_investment(properties: list) -> dict | None:
     # ── ML-driven growth rate for the best area ────────────────────────────
     # نَستخدم نموذج ML الحقيقي بدلاً من السلسلة الثابتة "5-8%"
     try:
-        from ml_model import get_future_multiplier
+        from ml_engine import get_future_multiplier
         best_location = best.get("location", "")
         mult_1y = get_future_multiplier(best_location, 1)
         mult_5y = get_future_multiplier(best_location, 5)
@@ -759,7 +759,7 @@ def _handle_projects(msg: str, is_arabic: bool) -> dict | None:
     lines = []
     for p in projects:
         try:
-            from ml_model import get_future_multiplier
+            from ml_engine import get_future_multiplier
             mult_5y = get_future_multiplier(p.location, 5)
             growth_5y_pct = round((mult_5y - 1) * 100, 1)
         except Exception:
@@ -930,7 +930,7 @@ def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
     # نستخدم get_future_multiplier() من ML model — فائدة مركبة حتمية بدون عشوائية
     # Uses compound interest formula: future = price × (1 + annual_rate)^years
     try:
-        from ml_model import get_future_multiplier, ensure_trained
+        from ml_engine import get_future_multiplier, ensure_trained
         ensure_trained()   # تأكد أن الـ ML model مُدرَّب على عقارات DB
         multiplier   = get_future_multiplier(location, years_asked)
         future_price = round(price * multiplier, 0)

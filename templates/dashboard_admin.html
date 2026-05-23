@@ -34,6 +34,10 @@
         <a href="{{ url_for('main.dashboard') }}" class="nav-item active">
             <i class="fas fa-th-large"></i> Dashboard
         </a>
+        
+        <a href="{{ url_for('main.admin_ml_monitor') }}" class="nav-item">
+            <i class="fas fa-brain"></i> ML Monitor
+        </a>
 
         <div class="user-profile-mini">
             <img src="https://ui-avatars.com/api/?name={{ current_user.username }}" class="avatar">
