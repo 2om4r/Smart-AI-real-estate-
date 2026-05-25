@@ -552,6 +552,62 @@ def investment_map():
 
 
 # =====================================================
+# 🤖 Ahmed 2.0 — Full-screen Chat Page
+# =====================================================
+
+@main.route("/ahmed-chat")
+def ahmed_chat():
+    return render_template("ahmed_chat.html", title="Ahmed 2.0 — AI Advisor")
+
+
+# =====================================================
+# 📊 Real Estate Analytics
+# =====================================================
+
+@main.route("/analytics")
+def analytics():
+    from sqlalchemy import func as sqlfunc
+    total_properties = Property.query.count()
+    total_users      = User.query.count()
+    total_agents     = User.query.filter_by(role='agent').count()
+
+    # Properties by type
+    type_counts = db.session.query(
+        Property.type, sqlfunc.count(Property.id)
+    ).group_by(Property.type).all()
+    type_labels = [t[0] for t in type_counts]
+    type_values = [t[1] for t in type_counts]
+
+    # Properties by city/location (top 6)
+    city_counts = db.session.query(
+        Property.city, sqlfunc.count(Property.id)
+    ).filter(Property.city.isnot(None)).group_by(Property.city)\
+     .order_by(sqlfunc.count(Property.id).desc()).limit(6).all()
+    city_labels = [c[0] or 'Unknown' for c in city_counts]
+    city_values = [c[1] for c in city_counts]
+
+    # Average price
+    avg_price = db.session.query(sqlfunc.avg(Property.price)).scalar() or 0
+
+    # Recent 6 properties
+    recent = Property.query.order_by(Property.created_at.desc()).limit(6).all()
+
+    return render_template(
+        "analytics.html",
+        title="Analytics",
+        total_properties=total_properties,
+        total_users=total_users,
+        total_agents=total_agents,
+        type_labels=type_labels,
+        type_values=type_values,
+        city_labels=city_labels,
+        city_values=city_values,
+        avg_price=avg_price,
+        recent=recent,
+    )
+
+
+# =====================================================
 # 🔐 Register
 # =====================================================
 

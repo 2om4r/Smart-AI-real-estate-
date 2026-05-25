@@ -1,52 +1,348 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-6">
-        <div class="card shadow-sm border-0">
-            <div class="card-body p-5">
-                <h3 class="text-center mb-4">Login</h3>
-                <form method="POST" action="">
-                    {{ form.hidden_tag() }}
-                    <div class="mb-3">
-                        {{ form.email.label(class="form-label") }}
-                        {% if form.email.errors %}
-                        {{ form.email(class="form-control is-invalid") }}
-                        <div class="invalid-feedback">
-                            {% for error in form.email.errors %}
-                            <span>{{ error }}</span>
-                            {% endfor %}
-                        </div>
-                        {% else %}
-                        {{ form.email(class="form-control") }}
-                        {% endif %}
-                    </div>
-                    <div class="mb-3">
-                        {{ form.password.label(class="form-label") }}
-                        {% if form.password.errors %}
-                        {{ form.password(class="form-control is-invalid") }}
-                        <div class="invalid-feedback">
-                            {% for error in form.password.errors %}
-                            <span>{{ error }}</span>
-                            {% endfor %}
-                        </div>
-                        {% else %}
-                        {{ form.password(class="form-control") }}
-                        {% endif %}
-                    </div>
-                    <div class="mb-3 form-check">
-                        {{ form.remember(class="form-check-input") }}
-                        {{ form.remember.label(class="form-check-label") }}
-                    </div>
-                    <div class="d-grid">
-                        {{ form.submit(class="btn btn-primary") }}
-                    </div>
-                </form>
-                <div class="text-center mt-3">
-                    <small class="text-muted">Don't have an account? <a href="{{ url_for('main.register') }}">Sign
-                            Up</a></small>
-                </div>
+<style>
+/* ─── Auth Split Layout ─────────────────────────────────────── */
+.auth-wrapper {
+    display: flex;
+    min-height: calc(100vh - 130px);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(62,39,35,0.18);
+    margin: -16px -12px;
+}
+
+/* Left panel */
+.auth-panel-left {
+    flex: 1;
+    background: linear-gradient(160deg, #1c0d00 0%, #2d1800 40%, #3e2000 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 48px;
+    position: relative;
+    overflow: hidden;
+}
+.auth-panel-left::before {
+    content: '';
+    position: absolute;
+    top: -80px; right: -80px;
+    width: 320px; height: 320px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(232,188,112,0.18) 0%, transparent 70%);
+}
+.auth-panel-left::after {
+    content: '';
+    position: absolute;
+    bottom: -60px; left: -60px;
+    width: 260px; height: 260px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(181,147,90,0.12) 0%, transparent 70%);
+}
+.auth-brand-logo {
+    font-size: 2.4rem;
+    font-weight: 800;
+    color: #e8bc70;
+    letter-spacing: -0.5px;
+    margin-bottom: 8px;
+    z-index: 1;
+}
+.auth-brand-logo span { color: #fff; }
+.auth-tagline {
+    color: rgba(245,230,208,0.65);
+    font-size: 0.92rem;
+    text-align: center;
+    z-index: 1;
+    margin-bottom: 40px;
+    max-width: 260px;
+}
+.auth-feature-list {
+    list-style: none;
+    padding: 0; margin: 0;
+    z-index: 1;
+    width: 100%;
+    max-width: 280px;
+}
+.auth-feature-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(181,147,90,0.15);
+    color: #f5e6d0;
+    font-size: 0.88rem;
+}
+.auth-feature-list li:last-child { border-bottom: none; }
+.auth-feature-list .feat-icon {
+    width: 34px; height: 34px;
+    border-radius: 10px;
+    background: rgba(232,188,112,0.15);
+    border: 1px solid rgba(232,188,112,0.25);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    color: #e8bc70;
+    font-size: 0.9rem;
+}
+.auth-panel-left .stat-strip {
+    display: flex;
+    gap: 28px;
+    margin-top: 40px;
+    z-index: 1;
+}
+.stat-strip .stat-item {
+    text-align: center;
+}
+.stat-strip .stat-num {
+    font-size: 1.4rem;
+    font-weight: 800;
+    color: #e8bc70;
+    display: block;
+}
+.stat-strip .stat-lbl {
+    font-size: 0.68rem;
+    color: rgba(245,230,208,0.55);
+    letter-spacing: .6px;
+    text-transform: uppercase;
+}
+
+/* Right panel */
+.auth-panel-right {
+    width: 460px;
+    min-width: 340px;
+    background: var(--cream-light);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 60px 48px;
+    position: relative;
+}
+.auth-panel-right .auth-form-title {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--brown-dark);
+    margin-bottom: 4px;
+}
+.auth-panel-right .auth-form-sub {
+    font-size: 0.88rem;
+    color: var(--text-muted);
+    margin-bottom: 32px;
+}
+.auth-input-group {
+    margin-bottom: 18px;
+}
+.auth-input-group label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--text-medium);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    margin-bottom: 7px;
+    display: block;
+}
+.auth-input-group .input-wrap {
+    position: relative;
+}
+.auth-input-group .input-icon {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gold-warm);
+    font-size: 0.9rem;
+    z-index: 2;
+}
+.auth-input-group input {
+    width: 100%;
+    padding: 11px 14px 11px 40px;
+    border: 1.5px solid var(--cream-border);
+    border-radius: 12px;
+    background: var(--cream-bg);
+    color: var(--text-dark);
+    font-size: 0.92rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    outline: none;
+}
+.auth-input-group input:focus {
+    border-color: var(--gold-warm);
+    box-shadow: 0 0 0 3px rgba(196,139,89,0.12);
+}
+.auth-input-group input.is-invalid {
+    border-color: #dc3545;
+}
+.auth-input-group .invalid-feedback {
+    font-size: 0.78rem;
+    color: #dc3545;
+    margin-top: 5px;
+}
+.auth-remember {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+.auth-remember input[type="checkbox"] {
+    width: 16px; height: 16px;
+    accent-color: var(--gold-warm);
+    cursor: pointer;
+}
+.auth-remember label {
+    font-size: 0.84rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    margin: 0;
+}
+.auth-submit-btn {
+    width: 100%;
+    padding: 13px;
+    background: linear-gradient(135deg, #b5935a 0%, #e8bc70 100%);
+    border: none;
+    border-radius: 12px;
+    color: #fff;
+    font-size: 0.96rem;
+    font-weight: 700;
+    letter-spacing: .3px;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 4px 16px rgba(181,147,90,0.38);
+}
+.auth-submit-btn:hover {
+    background: linear-gradient(135deg, #a07840 0%, #d4a760 100%);
+    box-shadow: 0 6px 22px rgba(181,147,90,0.52);
+    transform: translateY(-1px);
+}
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 22px 0;
+}
+.auth-divider hr { flex: 1; border-color: var(--cream-border); margin: 0; }
+.auth-divider span { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+.auth-bottom-link {
+    text-align: center;
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    margin-top: 20px;
+}
+.auth-bottom-link a {
+    color: var(--gold-warm);
+    font-weight: 700;
+    text-decoration: none;
+}
+.auth-bottom-link a:hover { color: var(--gold-deep); }
+
+/* Responsive */
+@media (max-width: 768px) {
+    .auth-panel-left { display: none; }
+    .auth-wrapper { border-radius: 16px; }
+    .auth-panel-right { width: 100%; padding: 40px 28px; }
+}
+</style>
+
+<div class="auth-wrapper">
+    <!-- Left Branding Panel -->
+    <div class="auth-panel-left">
+        <div class="auth-brand-logo"><span>Smart</span> Estate</div>
+        <p class="auth-tagline">Your gateway to Oman's finest real estate investments</p>
+
+        <ul class="auth-feature-list">
+            <li>
+                <div class="feat-icon"><i class="fas fa-map-marked-alt"></i></div>
+                AI-powered Investment Heatmaps
+            </li>
+            <li>
+                <div class="feat-icon"><i class="fas fa-robot"></i></div>
+                Ahmed 2.0 — Your Smart Advisor
+            </li>
+            <li>
+                <div class="feat-icon"><i class="fas fa-chart-line"></i></div>
+                Real-time ROI Predictions
+            </li>
+            <li>
+                <div class="feat-icon"><i class="fas fa-building"></i></div>
+                500+ Premium Listings
+            </li>
+        </ul>
+
+        <div class="stat-strip">
+            <div class="stat-item">
+                <span class="stat-num">500+</span>
+                <span class="stat-lbl">Properties</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-num">12%</span>
+                <span class="stat-lbl">Avg ROI</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-num">98%</span>
+                <span class="stat-lbl">Satisfied</span>
             </div>
         </div>
+    </div>
+
+    <!-- Right Form Panel -->
+    <div class="auth-panel-right">
+        <h2 class="auth-form-title">Welcome back</h2>
+        <p class="auth-form-sub">Sign in to continue to your dashboard</p>
+
+        <form method="POST" action="" novalidate>
+            {{ form.hidden_tag() }}
+
+            <!-- Email -->
+            <div class="auth-input-group">
+                {{ form.email.label(class="") }}
+                <div class="input-wrap">
+                    <i class="fas fa-envelope input-icon"></i>
+                    {% if form.email.errors %}
+                    {{ form.email(class="is-invalid", placeholder="your@email.com") }}
+                    <div class="invalid-feedback">
+                        {% for error in form.email.errors %}<span>{{ error }}</span>{% endfor %}
+                    </div>
+                    {% else %}
+                    {{ form.email(placeholder="your@email.com") }}
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Password -->
+            <div class="auth-input-group">
+                {{ form.password.label(class="") }}
+                <div class="input-wrap">
+                    <i class="fas fa-lock input-icon"></i>
+                    {% if form.password.errors %}
+                    {{ form.password(class="is-invalid", placeholder="••••••••") }}
+                    <div class="invalid-feedback">
+                        {% for error in form.password.errors %}<span>{{ error }}</span>{% endfor %}
+                    </div>
+                    {% else %}
+                    {{ form.password(placeholder="••••••••") }}
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Remember -->
+            <div class="auth-remember">
+                {{ form.remember(id="remember") }}
+                {{ form.remember.label(for="remember", class="") }}
+            </div>
+
+            <button type="submit" class="auth-submit-btn">
+                <i class="fas fa-sign-in-alt me-2"></i>Sign In
+            </button>
+        </form>
+
+        <div class="auth-divider">
+            <hr><span>New to Smart Estate?</span><hr>
+        </div>
+
+        <a href="{{ url_for('main.register') }}" class="auth-submit-btn text-center text-decoration-none d-block"
+           style="background: transparent; border: 2px solid var(--gold-warm); color: var(--gold-warm); box-shadow: none;">
+            <i class="fas fa-user-plus me-2"></i>Create an Account
+        </a>
+
+        <p class="auth-bottom-link">
+            By signing in you agree to our <a href="#">Terms of Service</a>
+        </p>
     </div>
 </div>
 {% endblock %}

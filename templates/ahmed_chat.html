@@ -1,0 +1,546 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+/* ─── Full-screen Chat Layout ────────────────────────── */
+.ahmed-page {
+    display: flex;
+    height: calc(100vh - 130px);
+    min-height: 560px;
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 16px 60px rgba(62,39,35,0.16);
+    margin: -16px -12px;
+    background: #faf6f1;
+}
+
+/* ─── Left Sidebar ───────────────────────────────────── */
+.ahmed-sidebar {
+    width: 280px;
+    min-width: 240px;
+    background: linear-gradient(180deg, #1c0d00 0%, #2d1400 100%);
+    display: flex;
+    flex-direction: column;
+    padding: 28px 20px;
+    gap: 0;
+    flex-shrink: 0;
+}
+.ahmed-sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    margin-bottom: 28px;
+}
+.ahmed-big-avatar {
+    width: 52px; height: 52px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, #b5935a, #e8bc70);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem; color: #fff;
+    flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(181,147,90,0.45);
+}
+.ahmed-sidebar-brand .brand-text .brand-name {
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: #e8bc70;
+}
+.ahmed-sidebar-brand .brand-text .brand-version {
+    font-size: 0.7rem;
+    color: rgba(245,230,208,0.5);
+    letter-spacing: .5px;
+}
+.sidebar-section-label {
+    font-size: 0.66rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: rgba(181,147,90,0.6);
+    margin-bottom: 10px;
+    margin-top: 20px;
+    padding-left: 4px;
+}
+.capability-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.capability-item:hover {
+    background: rgba(181,147,90,0.12);
+}
+.capability-item .cap-icon {
+    width: 30px; height: 30px;
+    border-radius: 9px;
+    background: rgba(181,147,90,0.15);
+    border: 1px solid rgba(181,147,90,0.25);
+    display: flex; align-items: center; justify-content: center;
+    color: #e8bc70;
+    font-size: 0.82rem;
+    flex-shrink: 0;
+}
+.capability-item .cap-text .cap-title {
+    font-size: 0.83rem;
+    font-weight: 600;
+    color: #f5e6d0;
+    line-height: 1.2;
+}
+.capability-item .cap-text .cap-sub {
+    font-size: 0.7rem;
+    color: rgba(245,230,208,0.45);
+    margin-top: 1px;
+}
+.ahmed-sidebar-footer {
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid rgba(181,147,90,0.18);
+}
+.ahmed-sidebar-footer a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: rgba(245,230,208,0.5);
+    font-size: 0.78rem;
+    text-decoration: none;
+    padding: 6px 0;
+    transition: color 0.2s;
+}
+.ahmed-sidebar-footer a:hover { color: #e8bc70; }
+
+/* ─── Main Chat Area ─────────────────────────────────── */
+.ahmed-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Chat Header */
+.ahmed-chat-header {
+    background: #fff;
+    padding: 16px 24px;
+    border-bottom: 1px solid #f0e4d4;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+}
+.ahmed-chat-header .hdr-avatar {
+    width: 44px; height: 44px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #b5935a, #e8bc70);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.15rem; color: #fff;
+    box-shadow: 0 3px 10px rgba(181,147,90,0.35);
+}
+.hdr-info .hdr-name {
+    font-size: 1rem;
+    font-weight: 800;
+    color: #3e2723;
+}
+.hdr-info .hdr-status {
+    font-size: 0.72rem;
+    color: #8d6e63;
+    display: flex; align-items: center; gap: 5px;
+}
+.hdr-info .hdr-status::before {
+    content: '';
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #4caf50;
+    box-shadow: 0 0 6px #4caf50;
+}
+.hdr-actions { margin-left: auto; display: flex; gap: 8px; }
+.hdr-actions a {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: #faf6f1;
+    border: 1px solid #e8d5c0;
+    display: flex; align-items: center; justify-content: center;
+    color: #8d6e63;
+    font-size: 0.9rem;
+    text-decoration: none;
+    transition: all 0.2s;
+}
+.hdr-actions a:hover { background: #b5935a; color: #fff; border-color: #b5935a; }
+
+/* Messages */
+#full-chat-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    scroll-behavior: smooth;
+}
+#full-chat-body::-webkit-scrollbar { width: 5px; }
+#full-chat-body::-webkit-scrollbar-thumb { background: #e8d5c0; border-radius: 3px; }
+
+.fchat-message {
+    max-width: 72%;
+    padding: 12px 16px;
+    border-radius: 18px;
+    font-size: 0.88rem;
+    line-height: 1.6;
+    word-wrap: break-word;
+    animation: msgFade 0.25s ease;
+}
+@keyframes msgFade {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.fchat-bot {
+    background: #fff;
+    color: #3e2723;
+    border: 1px solid #ecddd0;
+    border-bottom-left-radius: 4px;
+    align-self: flex-start;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+}
+.fchat-user {
+    background: linear-gradient(135deg, #b5935a, #e8bc70);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+    align-self: flex-end;
+    box-shadow: 0 3px 12px rgba(181,147,90,0.35);
+}
+.fchat-timestamp {
+    font-size: 0.67rem;
+    color: #bcaaa4;
+    text-align: center;
+    margin: 6px 0;
+}
+
+/* Suggestion pills (welcome screen) */
+.welcome-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+.ws-pill {
+    padding: 8px 16px;
+    background: #fff;
+    border: 1.5px solid #e8d5c0;
+    border-radius: 24px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #5d4037;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.ws-pill:hover { background: #b5935a; color: #fff; border-color: #b5935a; }
+
+/* Input row */
+.ahmed-input-row {
+    padding: 16px 24px;
+    background: #fff;
+    border-top: 1px solid #f0e4d4;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+#full-chat-input {
+    flex: 1;
+    border: 1.5px solid #e8d5c0;
+    border-radius: 28px;
+    padding: 11px 20px;
+    font-size: 0.9rem;
+    outline: none;
+    background: #faf6f1;
+    color: #3e2723;
+    font-family: 'Outfit', sans-serif;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+#full-chat-input:focus {
+    border-color: #b5935a;
+    box-shadow: 0 0 0 3px rgba(181,147,90,0.12);
+}
+#full-chat-input::placeholder { color: #bcaaa4; }
+#full-send-btn {
+    height: 44px;
+    padding: 0 22px;
+    border-radius: 24px;
+    background: linear-gradient(135deg, #b5935a, #e8bc70);
+    border: none;
+    color: #fff;
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+    transition: all 0.2s;
+    box-shadow: 0 3px 12px rgba(181,147,90,0.4);
+    white-space: nowrap;
+}
+#full-send-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 5px 16px rgba(181,147,90,0.55);
+}
+
+@media (max-width: 768px) {
+    .ahmed-sidebar { display: none; }
+    .ahmed-page { border-radius: 14px; }
+    .fchat-message { max-width: 88%; }
+}
+</style>
+
+<div class="ahmed-page">
+    <!-- ── Sidebar ── -->
+    <div class="ahmed-sidebar">
+        <div class="ahmed-sidebar-brand">
+            <div class="ahmed-big-avatar"><i class="fas fa-robot"></i></div>
+            <div class="brand-text">
+                <div class="brand-name">Ahmed 2.0</div>
+                <div class="brand-version">POWERED BY OPENAI GPT-4</div>
+            </div>
+        </div>
+
+        <div class="sidebar-section-label">Capabilities</div>
+
+        <div class="capability-item" onclick="fillInput('Find best investment areas in Muscat')">
+            <div class="cap-icon"><i class="fas fa-map-marked-alt"></i></div>
+            <div class="cap-text">
+                <div class="cap-title">Investment Hotspots</div>
+                <div class="cap-sub">Best areas by ROI &amp; growth</div>
+            </div>
+        </div>
+        <div class="capability-item" onclick="fillInput('What is the price trend for villas in Oman?')">
+            <div class="cap-icon"><i class="fas fa-chart-line"></i></div>
+            <div class="cap-text">
+                <div class="cap-title">Price Forecasting</div>
+                <div class="cap-sub">1Y / 2Y / 5Y projections</div>
+            </div>
+        </div>
+        <div class="capability-item" onclick="fillInput('Show me apartments under 80,000 OMR')">
+            <div class="cap-icon"><i class="fas fa-building"></i></div>
+            <div class="cap-text">
+                <div class="cap-title">Property Search</div>
+                <div class="cap-sub">Filter by type, budget, area</div>
+            </div>
+        </div>
+        <div class="capability-item" onclick="fillInput('Compare ROI of Muscat vs Salalah')">
+            <div class="cap-icon"><i class="fas fa-balance-scale"></i></div>
+            <div class="cap-text">
+                <div class="cap-title">Area Comparison</div>
+                <div class="cap-sub">Side-by-side market analysis</div>
+            </div>
+        </div>
+        <div class="capability-item" onclick="fillInput('What are Surooh projects available?')">
+            <div class="cap-icon"><i class="fas fa-star"></i></div>
+            <div class="cap-text">
+                <div class="cap-title">Surooh &amp; OMRAN</div>
+                <div class="cap-sub">Featured development projects</div>
+            </div>
+        </div>
+
+        <div class="ahmed-sidebar-footer">
+            <a href="{{ url_for('main.investment_map') }}"><i class="fas fa-map"></i> View Investment Map</a>
+            <a href="{{ url_for('main.home') }}"><i class="fas fa-home"></i> Browse Properties</a>
+            <a href="{{ url_for('main.analytics') }}"><i class="fas fa-chart-bar"></i> Analytics Dashboard</a>
+        </div>
+    </div>
+
+    <!-- ── Main Chat ── -->
+    <div class="ahmed-main">
+        <!-- Header -->
+        <div class="ahmed-chat-header">
+            <div class="hdr-avatar"><i class="fas fa-robot"></i></div>
+            <div class="hdr-info">
+                <div class="hdr-name">Ahmed 2.0 — Real Estate AI Advisor</div>
+                <div class="hdr-status">Online · RAG + ML Powered · Oman Market Expert</div>
+            </div>
+            <div class="hdr-actions">
+                <a href="{{ url_for('main.investment_map') }}" title="Investment Map"><i class="fas fa-map-marked-alt"></i></a>
+                <a href="{{ url_for('main.analytics') }}" title="Analytics"><i class="fas fa-chart-bar"></i></a>
+                <a href="#" onclick="clearChat(event)" title="Clear Chat"><i class="fas fa-trash-alt"></i></a>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div id="full-chat-body">
+            <div class="fchat-timestamp">Today · Smart Real Estate Oman</div>
+            <div class="fchat-message fchat-bot">
+                <strong>Marhaba! I'm Ahmed 2.0</strong> 🏡<br>
+                I'm your dedicated real estate AI advisor for the Omani market.<br>
+                I can help you with:
+                <ul style="margin:10px 0 6px;padding-left:18px;font-size:0.84em;color:#5d4037;">
+                    <li>Finding properties that match your budget &amp; goals</li>
+                    <li>Analysing investment ROI across Oman's regions</li>
+                    <li>Price forecasting (1Y / 2Y / 5Y projections)</li>
+                    <li>Comparing areas like Muscat, Salalah, Sohar &amp; more</li>
+                </ul>
+                <div class="welcome-suggestions">
+                    <span class="ws-pill" onclick="fillInput('Best ROI investment areas in Oman')">Best ROI areas?</span>
+                    <span class="ws-pill" onclick="fillInput('Show villas in Muscat under 200,000 OMR')">Villas in Muscat</span>
+                    <span class="ws-pill" onclick="fillInput('What is my budget for 100,000 OMR?')">Budget OMR 100K</span>
+                    <span class="ws-pill" onclick="fillInput('Compare Muscat vs Salalah investment')">Muscat vs Salalah</span>
+                    <span class="ws-pill" onclick="fillInput('Tell me about Surooh projects')">Surooh Projects</span>
+                    <span class="ws-pill" onclick="fillInput('What are the price trends in Oman real estate?')">Price trends</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Input -->
+        <div class="ahmed-input-row">
+            <input type="text" id="full-chat-input"
+                   placeholder="Ask Ahmed about properties, ROI, areas, investment advice…"
+                   autocomplete="off">
+            <button id="full-send-btn" onclick="fullSend()">
+                <i class="fas fa-paper-plane"></i> Send
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+const fullBody  = document.getElementById('full-chat-body');
+const fullInput = document.getElementById('full-chat-input');
+let _convId     = null;
+
+function fillInput(text) {
+    fullInput.value = text;
+    fullInput.focus();
+}
+
+function clearChat(e) {
+    e.preventDefault();
+    fullBody.innerHTML = '<div class="fchat-timestamp">Chat cleared</div>';
+    _convId = null;
+}
+
+function renderMD(t) {
+    return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g,'<em>$1</em>')
+            .replace(/\n/g,'<br>');
+}
+
+function appendMsg(html, cls) {
+    const d = document.createElement('div');
+    d.className = `fchat-message ${cls}`;
+    d.innerHTML = html;
+    fullBody.appendChild(d);
+    fullBody.scrollTop = fullBody.scrollHeight;
+    return d;
+}
+
+function appendHTML(html) {
+    const d = document.createElement('div');
+    d.className = 'fchat-message fchat-bot';
+    d.style.cssText = 'padding:0;background:transparent;border:none;box-shadow:none;max-width:80%;';
+    d.innerHTML = html;
+    fullBody.appendChild(d);
+    fullBody.scrollTop = fullBody.scrollHeight;
+}
+
+function fullSend() {
+    const msg = fullInput.value.trim();
+    if (!msg) return;
+
+    appendMsg(msg.replace(/&/g,'&amp;').replace(/</g,'&lt;'), 'fchat-user');
+    fullInput.value = '';
+
+    // Typing indicator
+    const typing = document.createElement('div');
+    typing.className = 'fchat-message fchat-bot';
+    typing.id = 'fc-typing';
+    typing.innerHTML = '<div style="display:flex;gap:5px;padding:2px 0"><span style="animation:blink 1s infinite;font-size:1.3em;">●</span><span style="animation:blink 1s .2s infinite;font-size:1.3em;">●</span><span style="animation:blink 1s .4s infinite;font-size:1.3em;">●</span></div>';
+    fullBody.appendChild(typing);
+    fullBody.scrollTop = fullBody.scrollHeight;
+
+    fetch('/api/chat', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        credentials: 'same-origin',
+        body: JSON.stringify({message: msg, conversation_id: _convId})
+    })
+    .then(r => {
+        if (r.status === 429) { throw new Error('rate_limited'); }
+        return r.json();
+    })
+    .then(data => {
+        document.getElementById('fc-typing')?.remove();
+        if (data.conversation_id) _convId = data.conversation_id;
+
+        if (data.action) {
+            if (data.action === 'add_favorite') appendMsg('❤️ Property saved to favorites!', 'fchat-bot');
+            if (data.action === 'send_message')  appendMsg('✅ Message sent to agent!', 'fchat-bot');
+            return;
+        }
+
+        const reply = data.text || 'Sorry, I could not process that request.';
+        appendMsg(renderMD(reply), 'fchat-bot');
+
+        // Property cards
+        if (data.properties && data.properties.length > 0) {
+            data.properties.forEach(p => {
+                const fmt = n => (n||0).toLocaleString(undefined,{maximumFractionDigits:0});
+                const safe = (s) => (s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+                appendHTML(`
+                <div style="background:#fff;border:1px solid #e8d5c0;border-radius:14px;padding:16px;margin:6px 0;box-shadow:0 2px 10px rgba(0,0,0,0.07);max-width:420px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+                        <div style="flex:1;">
+                            <div style="font-weight:800;color:#3e2723;font-size:0.95em;">${p.title}</div>
+                            <div style="color:#8d6e63;font-size:0.78em;margin-top:3px;"><i class="fas fa-map-marker-alt"></i> ${p.location}</div>
+                            <div style="font-size:0.74em;color:#8d6e63;margin-top:2px;">${p.type} · ${p.bedrooms || '—'} bed · ${p.bathrooms || '—'} bath</div>
+                        </div>
+                        <div style="text-align:right;flex-shrink:0;">
+                            <div style="font-weight:800;color:#b8860b;font-size:1.1em;">OMR ${fmt(p.price)}</div>
+                            <div style="font-size:0.75em;font-weight:700;color:#2e7d32;margin-top:2px;">ROI ${p.roi||0}%</div>
+                        </div>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+                        <span style="background:#e8f5e9;color:#2e7d32;padding:3px 9px;border-radius:8px;font-size:0.71em;font-weight:700;">💰 ${fmt(p.yearly_income)}/yr</span>
+                        <span style="background:#e3f2fd;color:#1565c0;padding:3px 9px;border-radius:8px;font-size:0.71em;font-weight:700;">📈 1Y: ${fmt(p.price_1y)}</span>
+                        <span style="background:#f3e5f5;color:#6a1b9a;padding:3px 9px;border-radius:8px;font-size:0.71em;font-weight:700;">📊 5Y: ${fmt(p.price_5y)}</span>
+                    </div>
+                    ${p.reason ? `<div style="color:#5d4037;font-size:0.76em;margin-top:9px;font-style:italic;padding:8px 10px;background:#fffbf5;border-radius:8px;border-left:3px solid #b5935a;">💡 ${p.reason}</div>` : ''}
+                    <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid #f0e4d4;">
+                        <button onclick="window.chatToggleFav && chatToggleFav(${p.id}, this)" style="flex:1;background:#fff3e0;color:#e65100;border:1px solid #ffe0b2;border-radius:10px;padding:7px;font-size:0.78em;font-weight:700;cursor:pointer;">🤍 Save</button>
+                        <button onclick="window.chatContactAgent && chatContactAgent(${p.agent_id}, '${safe(p.title)}')" style="flex:1;background:#e8f5e9;color:#2e7d32;border:1px solid #c8e6c9;border-radius:10px;padding:7px;font-size:0.78em;font-weight:700;cursor:pointer;">💬 Contact</button>
+                        <a href="/property/${p.id}" style="flex:1;background:#e3f2fd;color:#1565c0;border:1px solid #bbdefb;border-radius:10px;padding:7px;font-size:0.78em;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;">🔍 View</a>
+                    </div>
+                </div>`);
+            });
+        }
+
+        // Investment hotspots
+        if (data.investment_hotspots && data.investment_hotspots.length > 0) {
+            let h = `<div style="background:linear-gradient(135deg,#fff8e1,#fff3e0);border:1px solid #ffe0b2;border-radius:14px;padding:14px;margin:6px 0;max-width:420px;">
+                <div style="font-weight:800;color:#e65100;font-size:0.9em;margin-bottom:10px;">🔥 Top Investment Hotspots</div>`;
+            data.investment_hotspots.forEach((spot,i) => {
+                h += `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;${i<data.investment_hotspots.length-1?'border-bottom:1px solid #ffe0b2;':''}">
+                    <div style="width:26px;height:26px;background:linear-gradient(135deg,#b5935a,#e8bc70);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.7em;font-weight:800;flex-shrink:0;">${i+1}</div>
+                    <div>
+                        <div style="font-weight:700;font-size:0.84em;color:#3e2723;">${spot.name}</div>
+                        <div style="font-size:0.73em;color:#6d4c41;">${spot.reason}</div>
+                    </div>
+                </div>`;
+            });
+            h += '</div>';
+            appendHTML(h);
+        }
+    })
+    .catch(err => {
+        document.getElementById('fc-typing')?.remove();
+        if (err.message === 'rate_limited') {
+            appendMsg('⚠️ Too many messages — please wait a moment.', 'fchat-bot');
+        } else {
+            appendMsg('⚠️ Connection error — please try again.', 'fchat-bot');
+        }
+    });
+}
+
+fullInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); fullSend(); }
+});
+
+// Focus input on load
+fullInput.focus();
+</script>
+{% endblock %}
