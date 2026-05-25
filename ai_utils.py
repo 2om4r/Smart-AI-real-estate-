@@ -1,12 +1,3 @@
-# ai_utils.py — Ahmed 2.0: AI Real Estate Assistant for Oman
-# المساعد الذكي "أحمد 2.0" — تحليل النوايا، البحث العقاري، الاستثمار، الذاكرة المحادثاتية
-#
-# New in this version:
-#   - 🔒 Input sanitization + prompt injection protection
-#   - 🔍 RAG: search_knowledge_base() injected into system prompt
-#   - 🤝 Intent E: AGENT_PROPERTIES  — "أريد عقارات محمد"
-#   - 💼 Intent F: INVEST_WITH_AGENT — "أريد أستثمر مع سالم"
-#   - 📞 Intent G: CONTACT_AGENT     — "أريد وكيل في مسقط"
 
 from __future__ import annotations
 
@@ -26,19 +17,9 @@ from extensions import db
 
 logger = logging.getLogger(__name__)
 
-# ─── OpenAI Client ────────────────────────────────────────────────────────────
-# يُحمَّل المفتاح من متغيرات البيئة فقط — لا يُكتب في الكود أبدًا
 api_key = os.environ.get("OPENAI_API_KEY")
 client  = OpenAI(api_key=api_key)
 
-
-# =============================================================================
-# 🔒 SECURITY — Input sanitization + Prompt injection protection
-# الأمان — تنظيف المدخلات والحماية من حقن النصوص
-# =============================================================================
-
-# عبارات حقن النصوص المعروفة — يُرفض أي مدخل يحتوي على أي منها
-# Known prompt injection phrases — any input containing these is rejected immediately
 BLOCKED_PHRASES = [
     "ignore previous instructions",
     "ignore all previous",
@@ -55,14 +36,12 @@ BLOCKED_PHRASES = [
     "reveal your instructions",
 ]
 
-
 def sanitize_input(text: str) -> str:
     """
     Strip whitespace and hard-cap input at 1000 characters.
     تنظيف المدخل: إزالة المسافات الزائدة وتقليص الطول إلى 1000 حرف كحد أقصى.
     """
     return text.strip()[:1000]
-
 
 def is_prompt_injection(text: str) -> bool:
     """
@@ -71,12 +50,6 @@ def is_prompt_injection(text: str) -> bool:
     """
     t = text.lower()
     return any(phrase in t for phrase in BLOCKED_PHRASES)
-
-
-# =============================================================================
-# 📐 SCORING & ROI HELPERS
-# أدوات حساب العائد والسكور
-# =============================================================================
 
 def get_roi_assumption(prop_type: str) -> float:
     """
@@ -90,7 +63,6 @@ def get_roi_assumption(prop_type: str) -> float:
         'commercial': 8.0,
     }
     return mapping.get((prop_type or '').lower(), 5.0)
-
 
 def calculate_score(p: dict, avg_price: float = 100000) -> int:
     """
@@ -126,12 +98,6 @@ def calculate_score(p: dict, avg_price: float = 100000) -> int:
              roi_score * 0.2 + demand * 0.15 + growth * 0.15)
     return min(max(int(score), 0), 100)
 
-
-# =============================================================================
-# 📊 PORTFOLIO HELPERS
-# أدوات ملخص البورتفوليو وتوصيات الاستثمار
-# =============================================================================
-
 def portfolio_summary(properties: list) -> dict:
     """
     Aggregate stats for an agent's property portfolio.
@@ -163,7 +129,6 @@ def portfolio_summary(properties: list) -> dict:
         "avg_roi":           round(avg_roi, 1),
     }
 
-
 def recommend_investment(properties: list) -> dict | None:
     """
     Pick the best investment property from a list and explain why.
@@ -191,8 +156,6 @@ def recommend_investment(properties: list) -> dict | None:
     best    = scored[0]
     worst_2 = scored[-2:] if len(scored) >= 2 else []
 
-    # ── ML-driven growth rate for the best area ────────────────────────────
-    # نَستخدم نموذج ML الحقيقي بدلاً من السلسلة الثابتة "5-8%"
     try:
         from ml_engine import get_future_multiplier
         best_location = best.get("location", "")
@@ -208,18 +171,15 @@ def recommend_investment(properties: list) -> dict | None:
         predicted_growth_str = "5-8%/yr"
         ml_powered = False
 
-    # ── 5-year projected price for top pick ────────────────────────────────
     best_price = float(best.get('price', 0))
     projected_5y = round(best_price * (1 + five_year_growth_pct / 100), 0) if best_price else 0
     gain_5y = projected_5y - best_price
     gain_pct = (gain_5y / best_price * 100) if best_price > 0 else 0
 
-    # ── Per-type avg for fair comparison ──────────────────────────────────
     same_type = [p for p in properties if p.get('type') == best.get('type')]
     type_avg = statistics.mean([float(p.get('price', 0)) for p in same_type
                                 if p.get('price')]) if same_type else avg_price
 
-    # ── Build smart reason (ML-driven, location-aware) ────────────────────
     reason_parts = []
     if best_price < type_avg * 0.9:
         pct_below = round((1 - best_price / type_avg) * 100)
@@ -238,14 +198,12 @@ def recommend_investment(properties: list) -> dict | None:
     else:
         reason = "Balanced opportunity across location, price, and ROI factors."
 
-    # ── Risk level: combine score + area volatility ───────────────────────
     risk_level = (
         "low"      if best['score'] > 80 and annual_growth_pct > 5 else
         "medium"   if best['score'] > 60 else
         "high"
     )
 
-    # ── Confidence: depends on data availability ──────────────────────────
     confidence = (
         90 if ml_powered and len(properties) >= 20 else
         75 if ml_powered and len(properties) >= 5  else
@@ -275,12 +233,6 @@ def recommend_investment(properties: list) -> dict | None:
         "worst_2":              worst_2,
     }
 
-
-# =============================================================================
-# 🌱 DYNAMIC GROWTH RATES FROM AREA TABLE
-# جلب معدلات النمو من جدول المناطق بدلاً من القيم الثابتة
-# =============================================================================
-
 def _get_area_growth_rate(location: str) -> dict:
     """
     Convert Area.price_growth (0-100 scale) to real annual growth rates.
@@ -300,19 +252,11 @@ def _get_area_growth_rate(location: str) -> dict:
         elif "sohar"   in loc_lower or "صحار"  in loc_lower: base_growth = 0.06
         else:                                                  base_growth = 0.055
 
-    # حتمي بالكامل — نفس المدخلات تُعطي نفس النتائج دائماً (لا عشوائية)
-    # Fully deterministic — no random.uniform noise
     return {
         "1y": round(base_growth, 4),
         "2y": round(base_growth * 2.0, 4),
         "5y": round(base_growth * 4.5, 4),
     }
-
-
-# =============================================================================
-# 👤 AGENT MATCHING HELPERS
-# مساعدات مطابقة الوكلاء — تستخدم difflib للمطابقة التقريبية
-# =============================================================================
 
 def _extract_agent_name(msg: str) -> str:
     """
@@ -324,21 +268,20 @@ def _extract_agent_name(msg: str) -> str:
     يدعم الأنماط العربية والإنجليزية.
     """
     patterns = [
-        r'عقارات\s+(\w+)',                           # عقارات محمد
-        r'استثمر\s+مع\s+(\w+)',                      # استثمر مع سالم
-        r'أستثمر\s+مع\s+(\w+)',                      # أستثمر مع سالم
-        r'مع\s+(?:وكيل\s+)?(\w+)',                   # مع سالم / مع وكيل سالم
-        r'وكيل\s+(\w+)',                             # وكيل أحمد
-        r"(\w+)'s\s+propert(?:y|ies)",               # Ahmed's properties / Ahmed's property
-        r'propert(?:y|ies)\s+(?:of|by|from)\s+(\w+)',# properties of Ahmed
-        r'invest\s+with\s+(\w+)',                    # invest with Salem
-        r'show\s+me\s+(\w+)',                        # show me Ahmed
-        r'(?:need|want|find|get|show)\s+(\w+)\s+propert',  # need binthani property
-        r'(\w+)\s+propert(?:y|ies)',                 # binthani property / binthani properties
-        r'(?:propert(?:y|ies)|listing(?:s)?)\s+(?:by|from|of)\s+(\w+)',  # listings by Salem
+        r'عقارات\s+(\w+)',                           
+        r'استثمر\s+مع\s+(\w+)',                      
+        r'أستثمر\s+مع\s+(\w+)',                      
+        r'مع\s+(?:وكيل\s+)?(\w+)',                   
+        r'وكيل\s+(\w+)',                             
+        r"(\w+)'s\s+propert(?:y|ies)",               
+        r'propert(?:y|ies)\s+(?:of|by|from)\s+(\w+)',
+        r'invest\s+with\s+(\w+)',                    
+        r'show\s+me\s+(\w+)',                        
+        r'(?:need|want|find|get|show)\s+(\w+)\s+propert',  
+        r'(\w+)\s+propert(?:y|ies)',                 
+        r'(?:propert(?:y|ies)|listing(?:s)?)\s+(?:by|from|of)\s+(\w+)',  
     ]
-    # الكلمات الوظيفية التي يجب تجاهلها كأسماء وكلاء
-    # Functional words that should never be treated as agent names
+    
     skip_words = {
         'the', 'an', 'a', 'في', 'من', 'مع', 'new', 'best', 'cheap',
         'all', 'any', 'some', 'top', 'good', 'big', 'small', 'nice',
@@ -352,8 +295,6 @@ def _extract_agent_name(msg: str) -> str:
             if candidate.lower() not in skip_words:
                 return candidate
 
-    # آخر محاولة: فحص إذا كان أي اسم وكيل مسجَّل يظهر مباشرةً في الرسالة
-    # Last resort: scan registered agent names directly against the message
     try:
         agents = User.query.filter_by(role='agent').all()
         msg_lower_scan = msg.lower()
@@ -366,7 +307,6 @@ def _extract_agent_name(msg: str) -> str:
         pass
 
     return ''
-
 
 def _find_agent_by_name(name_hint: str) -> User | None:
     """
@@ -386,13 +326,11 @@ def _find_agent_by_name(name_hint: str) -> User | None:
 
     hint = name_hint.lower().strip()
 
-    # ── 1. Direct substring ───────────────────────────────────────────────────
     for agent in agents:
         if (hint in agent.username.lower() or
                 hint in (agent.full_name or '').lower()):
             return agent
 
-    # ── 2. Fuzzy on username ──────────────────────────────────────────────────
     usernames = [a.username.lower() for a in agents]
     matches = difflib.get_close_matches(hint, usernames, n=1, cutoff=0.5)
     if matches:
@@ -400,7 +338,6 @@ def _find_agent_by_name(name_hint: str) -> User | None:
             if agent.username.lower() == matches[0]:
                 return agent
 
-    # ── 3. Fuzzy on full_name ─────────────────────────────────────────────────
     full_names = [(a.full_name or '').lower() for a in agents]
     matches = difflib.get_close_matches(hint, full_names, n=1, cutoff=0.5)
     if matches:
@@ -409,12 +346,6 @@ def _find_agent_by_name(name_hint: str) -> User | None:
                 return agent
 
     return None
-
-
-# =============================================================================
-# 🤝 INTENT E — AGENT_PROPERTIES
-# "أريد عقارات محمد" / "show me Ahmed's properties"
-# =============================================================================
 
 def _handle_agent_properties(msg: str, is_arabic: bool) -> dict | None:
     """
@@ -441,7 +372,6 @@ def _handle_agent_properties(msg: str, is_arabic: bool) -> dict | None:
                 f"Sorry, no properties found for agent **{agent.username}** right now. 🏠")
         return {"text": text, "properties": [], "intent": "agent_properties"}
 
-    # ترتيب تنازلي حسب العائد
     props.sort(key=lambda p: get_roi_assumption(p.type or ''), reverse=True)
     top3 = props[:3]
 
@@ -454,7 +384,7 @@ def _handle_agent_properties(msg: str, is_arabic: bool) -> dict | None:
     result_props = []
     for p in top3:
         roi_val = get_roi_assumption(p.type or '')
-        # بونص عقارات تحت الإنشاء
+        
         if (p.status or '') == 'under_construction':
             roi_val = round(roi_val + 1.5, 1)
 
@@ -487,12 +417,6 @@ def _handle_agent_properties(msg: str, is_arabic: bool) -> dict | None:
         "agent":      {"id": agent.id, "username": agent.username, "phone": phone},
     }
 
-
-# =============================================================================
-# 💼 INTENT F — INVEST_WITH_AGENT
-# "أريد أستثمر مع سالم" / "best investment with Salem"
-# =============================================================================
-
 def _handle_invest_with_agent(msg: str,
                                user_id: int | None,
                                is_arabic: bool) -> dict | None:
@@ -511,7 +435,6 @@ def _handle_invest_with_agent(msg: str,
     if not agent:
         return None
 
-    # ── Find best investment property for this agent ──────────────────────────
     props     = Property.query.filter_by(agent_id=agent.id).all()
     prices    = [float(p.price) for p in props if p.price]
     avg_price = statistics.mean(prices) if prices else 100000
@@ -527,8 +450,6 @@ def _handle_invest_with_agent(msg: str,
         )
         best_prop = props[0]
 
-    # ── Save InvestmentRequest + Notification ─────────────────────────────────
-    # حفظ الطلب وإرسال الإشعار — الأخطاء لا توقف الرد على المستخدم
     try:
         req = InvestmentRequest(
             user_id=user_id,
@@ -606,12 +527,6 @@ def _handle_invest_with_agent(msg: str,
         "agent":      {"id": agent.id, "username": agent.username, "phone": phone},
     }
 
-
-# =============================================================================
-# 📞 INTENT G — CONTACT_AGENT
-# "أريد وكيل في مسقط" / "contact an agent in Muscat"
-# =============================================================================
-
 def _handle_contact_agent(msg: str, is_arabic: bool) -> dict | None:
     """
     Intent G: list available agents, optionally filtered by city.
@@ -620,7 +535,7 @@ def _handle_contact_agent(msg: str, is_arabic: bool) -> dict | None:
     Returns agent list with name, phone, property count.
     يُرجع قائمة الوكلاء مع الاسم والهاتف وعدد العقارات.
     """
-    # ── Extract city hint ─────────────────────────────────────────────────────
+    
     city_hint = ''
     for pattern in [r'في\s+(\w+)', r'بـ?\s*(\w+)', r'in\s+(\w+)', r'at\s+(\w+)']:
         m = re.search(pattern, msg, re.IGNORECASE)
@@ -637,8 +552,6 @@ def _handle_contact_agent(msg: str, is_arabic: bool) -> dict | None:
                 "Sorry, no agents are registered right now. 😔")
         return {"text": text, "properties": [], "intent": "contact_agent"}
 
-    # ── Filter + count properties ─────────────────────────────────────────────
-    # تصفية حسب المدينة إن ذُكرت، وإلا عرض جميع الوكلاء
     agent_data = []
     for agent in agents:
         if city_hint:
@@ -650,7 +563,6 @@ def _handle_contact_agent(msg: str, is_arabic: bool) -> dict | None:
             count = Property.query.filter_by(agent_id=agent.id).count()
         agent_data.append((agent, count))
 
-    # If city filter returned nothing, fall back to all agents
     if city_hint and all(c == 0 for _, c in agent_data):
         agent_data = [
             (a, Property.query.filter_by(agent_id=a.id).count())
@@ -658,9 +570,7 @@ def _handle_contact_agent(msg: str, is_arabic: bool) -> dict | None:
         ]
 
     agent_data.sort(key=lambda x: x[1], reverse=True)
-    # عرض جميع الوكلاء — بدون حد مصطنع يخفي بعضهم
-    # Show ALL agents — no artificial cut-off that hides some of them
-    # (cap at 20 only as a safety limit for very large deployments)
+    
     agent_data = agent_data[:20]
 
     lines       = []
@@ -693,18 +603,6 @@ def _handle_contact_agent(msg: str, is_arabic: bool) -> dict | None:
         "agents":     agents_list,
     }
 
-
-# =============================================================================
-# 📈 INTENT H — OWN PROPERTY FORECAST
-# "I have a villa worth 500,000 OMR, what will the price be after 5 years?"
-# "عندي فيلا بـ 500,000 ريال، كم سيكون سعرها بعد 5 سنوات؟"
-# =============================================================================
-
-# =============================================================================
-# 🏗️ INTENT I — PROJECTS / DEVELOPMENTS
-# "show me projects in Muscat" / "ما هي المشاريع المتاحة؟"
-# =============================================================================
-
 def _handle_projects(msg: str, is_arabic: bool) -> dict | None:
     """
     Intent I: list multi-unit projects, optionally filtered by city.
@@ -720,7 +618,7 @@ def _handle_projects(msg: str, is_arabic: bool) -> dict | None:
       - 5-year ML growth projection
       - Direct link to project page
     """
-    # ── Extract city hint (optional filter) ───────────────────────────────
+    
     city_hint = ''
     for pattern in [r'في\s+([A-Za-zأ-ي\s]+)', r'in\s+([A-Za-z\s]+)',
                     r'at\s+([A-Za-z\s]+)', r'بـ?\s+([A-Za-zأ-ي]+)']:
@@ -731,7 +629,6 @@ def _handle_projects(msg: str, is_arabic: bool) -> dict | None:
                 city_hint = cand
                 break
 
-    # ── Query projects from DB ────────────────────────────────────────────
     q = Property.query.filter_by(is_project=True)
     if city_hint:
         q = q.filter(
@@ -742,7 +639,6 @@ def _handle_projects(msg: str, is_arabic: bool) -> dict | None:
         )
     projects = q.order_by(Property.created_at.desc()).limit(10).all()
 
-    # If filter returned nothing, show all
     if not projects and city_hint:
         projects = Property.query.filter_by(is_project=True).limit(10).all()
 
@@ -754,7 +650,6 @@ def _handle_projects(msg: str, is_arabic: bool) -> dict | None:
         )
         return {"text": text, "properties": [], "intent": "projects"}
 
-    # ── Build response with ML projections ────────────────────────────────
     project_cards = []
     lines = []
     for p in projects:
@@ -788,7 +683,6 @@ def _handle_projects(msg: str, is_arabic: bool) -> dict | None:
             "is_project":      True,
         })
 
-        # Build text line per project
         growth_txt = (f" · ML نمو 5 سنوات: +{growth_5y_pct}%"
                      if is_arabic and growth_5y_pct else
                      f" · 5y ML growth: +{growth_5y_pct}%"
@@ -812,8 +706,7 @@ def _handle_projects(msg: str, is_arabic: bool) -> dict | None:
                 f"   📅 Completion: {p.completion_date or 'TBD'}"
             )
 
-    city_label = f"في {city_hint} " if city_hint and is_arabic else \
-                 f"in {city_hint} " if city_hint else ""
+    city_label = f"في {city_hint} " if city_hint and is_arabic else                 f"in {city_hint} " if city_hint else ""
 
     if is_arabic:
         text = (f"🏗️ المشاريع العقاريَّة المتاحة {city_label}({len(projects)}):\n\n"
@@ -829,7 +722,6 @@ def _handle_projects(msg: str, is_arabic: bool) -> dict | None:
         "projects":   project_cards,
     }
 
-
 def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
     """
     Intent H: user already owns (or hypothetically has) a property and wants
@@ -840,13 +732,13 @@ def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
     Calculates: future_value using _get_area_growth_rate()
     Returns a detailed projection card in the chat text.
     """
-    # ── Extract price (e.g. 5000000OMR / 500,000 OMR / 500000 ريال) ──────────
+    
     price_match = re.search(
         r'(\d[\d,]*(?:\.\d+)?)\s*(?:omr|OMR|rial|ريال|rials)',
         msg, re.IGNORECASE
     )
     if not price_match:
-        # fallback: large bare number (>= 1000) near property keywords
+        
         price_match = re.search(r'\b(\d{4,}(?:,\d{3})*(?:\.\d+)?)\b', msg)
     if not price_match:
         return None
@@ -859,7 +751,6 @@ def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
     if price <= 0:
         return None
 
-    # ── Extract years ─────────────────────────────────────────────────────────
     years_asked = None
     for _pat in [r'after\s+(\d+)\s+year', r'in\s+(\d+)\s+year',
                  r'(\d+)\s+years?\s+(?:from now|later)',
@@ -870,10 +761,8 @@ def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
             break
 
     if not years_asked:
-        return None   # no year mentioned → not a forecast question
+        return None   
 
-    # ── Extract property type (villa / apartment / land / townhouse) ──────────
-    # استخراج نوع العقار لذكره في الرد بدقة
     ptype = ""
     _ptype_map = {
         'villa':     'Villa',     'فيلا':     'فيلا',
@@ -888,9 +777,6 @@ def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
             ptype = label
             break
 
-    # ── Extract location ──────────────────────────────────────────────────────
-    # Stop at common terminators: worth/cost/price/for/after/how/كم/بعد + any digit
-    # نتوقف عند الكلمات الفاصلة أو أي رقم لتجنّب التقاط جزء من الجملة
     loc_match = re.search(
         r'(?:in|at|في|بـ?)\s+([A-Za-zأ-ي][A-Za-zأ-ي\s\-]+?)'
         r'(?=\s+(?:worth|cost|costs|price|priced|for|after|بعد|how|كم|من|with|of)\b'
@@ -899,8 +785,6 @@ def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
     )
     location = loc_match.group(1).strip() if loc_match else ""
 
-    # ── Normalize Omani location aliases (Alburaimi → Al Buraimi, etc.) ───────
-    # نوحّد كتابة المناطق العُمانية الشائعة قبل البحث في جدول Area
     _loc_aliases = {
         'alburaimi':   'Al Buraimi',
         'al-buraimi':  'Al Buraimi',
@@ -926,17 +810,14 @@ def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
         if loc_key in _loc_aliases:
             location = _loc_aliases[loc_key]
 
-    # ── Calculate future value using ML compound growth multiplier ───────────
-    # نستخدم get_future_multiplier() من ML model — فائدة مركبة حتمية بدون عشوائية
-    # Uses compound interest formula: future = price × (1 + annual_rate)^years
     try:
         from ml_engine import get_future_multiplier, ensure_trained
-        ensure_trained()   # تأكد أن الـ ML model مُدرَّب على عقارات DB
+        ensure_trained()   
         multiplier   = get_future_multiplier(location, years_asked)
         future_price = round(price * multiplier, 0)
         rate         = multiplier - 1
     except Exception:
-        # Fallback: Area table linear approximation if ML unavailable
+        
         growth       = _get_area_growth_rate(location)
         rate         = growth["2y"] if years_asked <= 2 else growth["5y"]
         future_price = round(price * (1 + rate), 0)
@@ -945,8 +826,6 @@ def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
     gain_pct = round((gain / price) * 100, 1)
     loc_str  = location or ("عُمان" if is_arabic else "Oman")
 
-    # Use the extracted property type + location in the header for clarity
-    # نُظهر نوع العقار والموقع بدقة في العنوان لتجنّب الالتباس
     annual_pct = round(rate / years_asked * 100, 2) if years_asked else 0
     if is_arabic:
         ptype_str = ptype or "عقار"
@@ -978,12 +857,6 @@ def _handle_own_property_forecast(msg: str, is_arabic: bool) -> dict | None:
         "intent":     "own_property_forecast",
     }
 
-
-# =============================================================================
-# 🤖 MAIN CHAT FUNCTION
-# دالة المحادثة الرئيسية مع إدارة الذاكرة والتتبع الكامل
-# =============================================================================
-
 def get_ai_response(prompt: str,
                     user_id: int | None = None,
                     conversation_id: int | None = None) -> dict:
@@ -1010,8 +883,6 @@ def get_ai_response(prompt: str,
     """
     start_time = time.time()
 
-    # ── 0. Security: sanitize + injection check ────────────────────────────────
-    # الأمان: تنظيف المدخل أولاً، ثم التحقق من حقن النصوص
     prompt = sanitize_input(prompt)
 
     if is_prompt_injection(prompt):
@@ -1033,16 +904,12 @@ def get_ai_response(prompt: str,
     is_arabic  = bool(re.search(r"[؀-ۿ]", prompt))
     language   = 'ar' if is_arabic else 'en'
 
-    # ── 1. Quick intercepts (no GPT call needed) ──────────────────────────────
-    # اختصارات سريعة لا تحتاج استدعاء GPT
     if any(w in msg_lower for w in ["احفظ", "favorite", "like", "save"]):
         recent  = db.session.query(Property).order_by(Property.id.desc()).first()
         prop_id = recent.id if recent else 1
         return {"action": "add_favorite", "property_id": prop_id,
                 "conversation_id": conversation_id}
 
-    # Quick intercept: "send message / contact" — only for direct messaging, not agent search
-    # لا نُشغّله إذا كان المستخدم يبحث عن وكيل (Intent G تتولّى ذلك)
     _contact_g_kws = ["agent", "وكيل", "agents", "وكلاء"]
     if (any(w in msg_lower for w in ["contact", "تواصل", "رسالة", "message"])
             and not any(kw in msg_lower for kw in _contact_g_kws)):
@@ -1052,8 +919,6 @@ def get_ai_response(prompt: str,
             return {"action": "send_message", "agent_id": a_id, "message": prompt,
                     "conversation_id": conversation_id}
 
-    # ── 2. Load or create Conversation ────────────────────────────────────────
-    # إنشاء محادثة جديدة أو تحميل القديمة
     if conversation_id:
         conversation = Conversation.query.get(conversation_id)
         if not conversation:
@@ -1067,11 +932,6 @@ def get_ai_response(prompt: str,
 
     conversation_id = conversation.id
 
-    # ── 3. New intent intercepts: E / F / G ───────────────────────────────────
-    # النوايا الجديدة: عقارات وكيل، استثمار مع وكيل، تواصل مع وكيل
-
-    # Intent F — INVEST_WITH_AGENT (check before E to avoid conflict)
-    # النية F — أولوية أعلى من E لأن "استثمر مع" أكثر تحديدًا
     invest_keywords_ar = ["استثمر مع", "أستثمر مع", "استثمار مع"]
     invest_keywords_en = ["invest with", "investment with"]
     if (any(kw in msg_lower for kw in invest_keywords_ar + invest_keywords_en)):
@@ -1084,14 +944,11 @@ def get_ai_response(prompt: str,
             result.setdefault("investment_hotspots", [])
             return result
 
-    # Intent G — CONTACT_AGENT
-    # النية G — البحث عن وكيل (تشمل كلمة "agent" وحدها)
     contact_keywords_ar = ["أريد وكيل", "ابحث عن وكيل", "وكيل في", "وكلاء في", "وكيل"]
     contact_keywords_en = ["contact agent", "find agent", "agent in", "agents in",
-                           "agents", "agent"]   # ← "agent" alone now triggers this
+                           "agents", "agent"]   
     if (any(kw in msg_lower for kw in contact_keywords_ar + contact_keywords_en)):
-        # لا نختطف Intent E — إذا كانت الرسالة تحتوي كلمة عقار + اسم وكيل → اتركها لـ E
-        # Don't hijack E: if message has property keyword AND an agent name → skip G
+        
         prop_kws      = ["property", "properties", "listing", "عقار", "عقارات"]
         is_prop_query = (any(kw in msg_lower for kw in prop_kws)
                          and bool(_extract_agent_name(prompt)))
@@ -1105,9 +962,6 @@ def get_ai_response(prompt: str,
                 result.setdefault("investment_hotspots", [])
                 return result
 
-    # Intent E — AGENT_PROPERTIES
-    # النية E — عقارات وكيل محدد
-    # Broad trigger: any property-related word + a detectable agent name
     props_keywords_ar = ["عقارات", "عقار"]
     props_keywords_en = ["properties", "property", "listing", "listings", "show me"]
     if (any(kw in msg_lower for kw in props_keywords_ar + props_keywords_en)
@@ -1121,9 +975,6 @@ def get_ai_response(prompt: str,
             result.setdefault("investment_hotspots", [])
             return result
 
-    # ── 3a-bis. Intent I — PROJECTS / DEVELOPMENTS ────────────────────────────
-    # "show me projects in Muscat" / "ما هي المشاريع المتاحة؟"
-    # يُحقَن قبل البحث العام لأن "projects" كلمة عامَّة تخلط مع "properties"
     project_kws_en = [
         "project", "projects", "development", "developments",
         "compound", "compounds", "new project", "off-plan",
@@ -1134,11 +985,8 @@ def get_ai_response(prompt: str,
         "تطوير عقاري", "مشروع جديد", "تحت الإنشاء", "تحت البناء",
     ]
     if any(kw in msg_lower for kw in project_kws_en + project_kws_ar):
-        # تجاهل إن كان "properties" بدون "project" (لتجنُّب hijacking البحث العام)
-        if "project" in msg_lower or "مشروع" in msg_lower or "كومباوند" in msg_lower \
-                or "مجمَّع" in msg_lower or "off-plan" in msg_lower \
-                or "development" in msg_lower or "تطوير" in msg_lower \
-                or "under construction" in msg_lower or "تحت الإنشاء" in msg_lower:
+        
+        if "project" in msg_lower or "مشروع" in msg_lower or "كومباوند" in msg_lower                or "مجمَّع" in msg_lower or "off-plan" in msg_lower                or "development" in msg_lower or "تطوير" in msg_lower                or "under construction" in msg_lower or "تحت الإنشاء" in msg_lower:
             result = _handle_projects(prompt, is_arabic)
             if result:
                 _log_chat(conversation_id, user_id, prompt,
@@ -1148,13 +996,10 @@ def get_ai_response(prompt: str,
                 result.setdefault("investment_hotspots", [])
                 return result
 
-    # ── 3b. Intent H — OWN PROPERTY FORECAST ─────────────────────────────────
-    # "I have a villa 500,000 OMR... after 5 years?" — pure calculation, no DB needed
-    # "عندي عقار بـ 500,000 ريال... بعد 5 سنوات؟" — حساب مباشر بدون بحث في DB
     own_kws_en = [
         "i have", "i own", "my villa", "my property", "my apartment",
         "my house", "my land", "i bought", "i purchased",
-        # hypothetical purchase ("if i buy ... worth X how much after Y years?")
+        
         "if i buy", "if i purchase", "if i get", "if i invest", "if i pay",
         "if i spend", "if i'd buy", "should i buy",
         "i want to buy", "i plan to buy", "i'm buying", "planning to buy",
@@ -1162,7 +1007,7 @@ def get_ai_response(prompt: str,
     ]
     own_kws_ar = [
         "عندي", "عندي فيلا", "لدي", "اشتريت", "عقاري", "فيلتي",
-        # هل أشتري / لو اشتريت / إذا اشتريت
+        
         "لو اشتريت", "إذا اشتريت", "هل أشتري", "أنوي شراء", "أريد شراء",
         "سوف أشتري", "إن اشتريت",
     ]
@@ -1176,8 +1021,6 @@ def get_ai_response(prompt: str,
             result.setdefault("investment_hotspots", [])
             return result
 
-    # ── 4. RAG context from ChromaDB ──────────────────────────────────────────
-    # سياق RAG من ChromaDB — يُحقَن في رسالة النظام لتزويد GPT ببيانات حقيقية
     rag_context = ""
     try:
         from rag_engine import search_knowledge_base
@@ -1185,8 +1028,6 @@ def get_ai_response(prompt: str,
     except Exception as e:
         logger.warning(f"[Ahmed] RAG search skipped: {e}")
 
-    # ── 5. Build conversation history from ChatLog ────────────────────────────
-    # بناء سياق المحادثة من الرسائل السابقة
     history = []
     if conversation_id:
         past_logs = (ChatLog.query
@@ -1198,18 +1039,11 @@ def get_ai_response(prompt: str,
             history.append({"role": "user",      "content": log.user_message})
             history.append({"role": "assistant",  "content": log.bot_response})
 
-    # ── 6. GPT intent extraction ───────────────────────────────────────────────
-    # استخراج النية والموقع والنوع والميزانية + حقن سياق RAG
-
-    # RAG block is prepended to system prompt when available
-    # كتلة RAG تُضاف في بداية رسالة النظام عند توفّرها
     rag_block = (
         f"Real data from our platform (use this to answer accurately):\n"
         f"{rag_context}\n\n"
     ) if rag_context else ""
 
-    # أخبر GPT باللغة صراحةً — لا تترك له مجال لتخمينها
-    # Tell GPT the language explicitly — never let it guess
     lang_instruction = (
         "IMPORTANT: The user wrote in Arabic. You MUST reply ONLY in Arabic."
         if is_arabic else
@@ -1264,8 +1098,6 @@ def get_ai_response(prompt: str,
     ai_text = extracted_data.get("text", fallback_text)
     intent  = extracted_data.get("intent", "search")
 
-    # ── 7. Property DB query ───────────────────────────────────────────────────
-    # البحث في قاعدة البيانات بناءً على الفلاتر المستخرجة
     query = Property.query
 
     loc = extracted_data.get("location", "")
@@ -1307,9 +1139,6 @@ def get_ai_response(prompt: str,
 
     results = query.all()
 
-    # ── 8a. Guard: only show properties when the user actually asked for them ──
-    # إذا لم يُعطِ المستخدم أي فلتر حقيقي ولم تكن رسالته تحتوي كلمات عقارية
-    # نخفي النتائج ونعرض رد GPT الطبيعي (تحية، شكر، محادثة عامة …)
     _prop_kws_en = [
         "property", "properties", "villa", "villas", "apartment", "apartments",
         "land", "lands", "townhouse", "commercial", "buy", "rent", "invest",
@@ -1321,9 +1150,7 @@ def get_ai_response(prompt: str,
         "تاون هاوس", "أريد", "أبحث", "ابحث", "أشتري", "اشتري", "استثمار",
         "استثمر", "إيجار", "ايجار", "بحث", "سعر", "تكلفة",
     ]
-    # A "real" filter: location given, type given, budget > 0, OR the message
-    # contains any property-search keyword → show property cards.
-    # Otherwise (greeting / small talk) → clear results, keep GPT text.
+    
     has_real_filters = bool(
         (loc  and loc.strip()  and loc.lower()  not in ("none", "null", "")) or
         (ptype and ptype.strip() and ptype.lower() not in ("none", "null", "any", "")) or
@@ -1332,17 +1159,14 @@ def get_ai_response(prompt: str,
     )
 
     if not has_real_filters:
-        # Pure greeting / small talk — show NO property cards
+        
         results = []
 
-    # ── 8b. Build coherent text based on ACTUAL DB results ───────────────────
-    # نبني النص بناءً على نتائج قاعدة البيانات الحقيقية — لا على نص GPT
-    # This prevents the "GPT says no data but we show properties" contradiction
     area_str   = loc if loc and loc.lower() not in ("none", "null", "") else ""
     budget_val = float(budget) if budget else 0
 
     if results:
-        count      = min(len(results), 4)   # we show max 4
+        count      = min(len(results), 4)   
         area_part  = f" في {area_str}"  if area_str and is_arabic  else f" in {area_str}" if area_str else ""
         budget_part = (f" ضمن ميزانية {int(budget_val):,} ريال عُماني"
                        if budget_val > 0 and is_arabic else
@@ -1360,10 +1184,9 @@ def get_ai_response(prompt: str,
             ai_text = (f"Sorry, we don't currently have exact matches in {area_str}. "
                        f"Consider expanding your criteria or nearby areas. 🏡")
     else:
-        # No location, no results — keep GPT's text as context
+        
         pass
 
-    # ── 9. Sort results ────────────────────────────────────────────────────────
     if intent == "investment" or "best investment" in msg_lower or "استثم" in msg_lower:
         results.sort(key=lambda x: get_roi_assumption(x.type or 'Unknown'), reverse=True)
     elif "cheapest" in msg_lower or "ارخص" in msg_lower:
@@ -1379,7 +1202,6 @@ def get_ai_response(prompt: str,
 
     top_results = results[:4]
 
-    # ── 10. Dynamic reason templates ──────────────────────────────────────────
     _reason_templates = {
         "Villa": [
             "High demand for luxury villas in {loc} driven by expat families and tourism growth",
@@ -1414,7 +1236,6 @@ def get_ai_response(prompt: str,
         _used_reasons.add(chosen)
         return chosen.format(loc=location)
 
-    # ── 11. Format top properties with dynamic ROI + growth ───────────────────
     properties_to_return = []
     for best_p in top_results:
         t_low = (best_p.type or '').lower()
@@ -1457,15 +1278,12 @@ def get_ai_response(prompt: str,
             "status":        prop_status,
         })
 
-    # ── 12. Future price question detection ───────────────────────────────────
-    # اكتشاف سؤال "كم سيكون السعر بعد X سنوات؟" والإجابة عنه صراحةً
-    # Detect "after X year(s)" and override text with a direct price projection answer
     _year_patterns = [
-        r'after\s+(\d+)\s+year',          # after 2 year / after 5 years
-        r'in\s+(\d+)\s+year',             # in 2 years
-        r'(\d+)\s+year[s]?\s+(?:from now|later|price)',  # 2 years from now
-        r'بعد\s+(\d+)\s+سن',              # بعد 2 سنة / سنوات
-        r'خلال\s+(\d+)\s+سن',             # خلال 3 سنوات
+        r'after\s+(\d+)\s+year',          
+        r'in\s+(\d+)\s+year',             
+        r'(\d+)\s+year[s]?\s+(?:from now|later|price)',  
+        r'بعد\s+(\d+)\s+سن',              
+        r'خلال\s+(\d+)\s+سن',             
     ]
     years_asked = None
     for _pat in _year_patterns:
@@ -1475,8 +1293,8 @@ def get_ai_response(prompt: str,
             break
 
     if years_asked and properties_to_return:
-        best_p_proj = properties_to_return[0]   # أفضل عقار في النتائج
-        # اختيار السعر المناسب حسب عدد السنوات
+        best_p_proj = properties_to_return[0]   
+        
         if years_asked <= 1:
             future_price = best_p_proj.get('price_1y', 0)
             yr_key       = "1Y"
@@ -1511,7 +1329,6 @@ def get_ai_response(prompt: str,
                 f"(See the property cards below to compare all options)"
             )
 
-    # ── 13. Follow-up questions ────────────────────────────────────────────────
     followups_ar = [
         "هل تفضل سعر معين؟ 💰",
         "هل تبحث عن استثمار طويل أو قصير المدى؟ 📊",
@@ -1527,7 +1344,6 @@ def get_ai_response(prompt: str,
     if properties_to_return:
         ai_text += "\n\n" + random.choice(followups_ar if is_arabic else followups_en)
 
-    # ── 13. Investment hotspots from Area table ────────────────────────────────
     hotspot_query = Area.query
     if loc and loc.strip() and loc.lower() not in ("none", "null"):
         hotspot_query = hotspot_query.filter(Area.name.ilike(f"%{loc}%"))
@@ -1549,24 +1365,16 @@ def get_ai_response(prompt: str,
             "reason": ", ".join(parts).capitalize(),
         })
 
-    # ── 14. Log to ChatLog ────────────────────────────────────────────────────
     response_time = round(time.time() - start_time, 3)
     _log_chat(conversation_id, user_id, prompt, ai_text, intent, language,
               tokens_used, response_time)
 
-    # ── 15. Return response ────────────────────────────────────────────────────
     return {
         "text":                ai_text,
         "properties":          properties_to_return,
         "investment_hotspots": investment_hotspots,
         "conversation_id":     conversation_id,
     }
-
-
-# =============================================================================
-# 🗄️ LOGGING HELPER (internal)
-# مساعد تسجيل الرسائل — يُستخدم داخليًا فقط
-# =============================================================================
 
 def _log_chat(conversation_id: int | None,
               user_id: int | None,

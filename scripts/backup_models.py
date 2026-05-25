@@ -24,19 +24,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
 
-
 PROJECT_ROOT = Path(__file__).parent.parent
 REGISTRY_DIR = PROJECT_ROOT / "models" / "registry"
 BACKUP_DIR   = PROJECT_ROOT / "models" / "backups"
 
-RETENTION_DAYS = 30   # delete backups older than this
-
+RETENTION_DAYS = 30   
 
 def run() -> dict:
     """Copy current active model to backups/ + prune old backups."""
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
-    # ── 1. Find the active model ─────────────────────────────────
     latest = REGISTRY_DIR / "latest.pkl"
     if not latest.exists() or not latest.is_symlink():
         logger.warning(f"No active model at {latest}")
@@ -47,7 +44,6 @@ def run() -> dict:
         logger.warning(f"Symlink target missing: {src}")
         return {'status': 'no_target'}
 
-    # ── 2. Copy with date-stamped name ──────────────────────────
     today    = datetime.utcnow().strftime('%Y%m%d')
     dest     = BACKUP_DIR / f"backup_{today}_{src.name}"
 
@@ -59,7 +55,6 @@ def run() -> dict:
         logger.info(f"✅ Backed up: {dest.name} ({dest.stat().st_size / 1024 / 1024:.1f} MB)")
         backed_up = True
 
-    # ── 3. Prune old backups ─────────────────────────────────────
     cutoff = datetime.utcnow() - timedelta(days=RETENTION_DAYS)
     pruned = 0
     for f in BACKUP_DIR.glob("backup_*.pkl"):
@@ -72,7 +67,6 @@ def run() -> dict:
             except Exception as e:
                 logger.warning(f"Could not prune {f}: {e}")
 
-    # ── 4. Summary ───────────────────────────────────────────────
     remaining = list(BACKUP_DIR.glob("backup_*.pkl"))
     return {
         'status':      'success',
@@ -82,7 +76,6 @@ def run() -> dict:
         'total_backups': len(remaining),
         'retention_days': RETENTION_DAYS,
     }
-
 
 if __name__ == "__main__":
     result = run()

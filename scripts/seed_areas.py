@@ -4,7 +4,7 @@ from extensions import db
 from models import Area
 
 AREAS = [
-    # name, lat, lng, avg_price(OMR), demand, price_growth, services, listing_count
+    
     ("Al Mouj (The Wave), Muscat",  23.6087, 58.5117, 285000, 95, 88, 92, 80),
     ("Qurum, Muscat",               23.5872, 58.3721, 195000, 90, 82, 95, 75),
     ("Al Khuwair, Muscat",          23.6020, 58.3620, 165000, 85, 76, 88, 70),

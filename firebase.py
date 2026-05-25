@@ -8,7 +8,7 @@ db = None
 
 if os.path.exists(json_path):
     cred = credentials.Certificate(json_path)
-    # Prevent multiple app initializations if imported multiple times
+    
     if not firebase_admin._apps:
         firebase_admin.initialize_app(cred)
     db = firestore.client()

@@ -31,11 +31,6 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-
-# =============================================================================
-# 🧠 TTL CACHE — simple in-memory cache with expiry
-# =============================================================================
-
 class TTLCache:
     """
     Thread-safe in-memory cache with per-entry TTL.
@@ -65,7 +60,7 @@ class TTLCache:
 
     def set(self, key: str, value: Any) -> None:
         with self._lock:
-            # Simple LRU eviction: drop random one if at capacity
+            
             if len(self._store) >= self.maxsize:
                 self._store.pop(next(iter(self._store)), None)
             self._store[key] = (value, time.time() + self.ttl_seconds)
@@ -81,11 +76,6 @@ class TTLCache:
 
     def __len__(self) -> int:
         return len(self._store)
-
-
-# =============================================================================
-# 🌲 ML ENGINE — Singleton inference engine
-# =============================================================================
 
 class MLEngine:
     """
@@ -106,18 +96,16 @@ class MLEngine:
         # → {'current': 245k, 'future': 388k, 'growth_pct': 58.4, 'confidence': 87}
     """
 
-    # Default model location (can be overridden via env)
     DEFAULT_MODEL_PATH = os.path.join(
         os.path.dirname(__file__), "ml_model_trained.pkl"
     )
 
-    # Required feature order — must match training
     FEATURE_NAMES = [
         'type', 'governorate', 'area',
         'sqm', 'bedrooms', 'bathrooms', 'floor', 'year',
     ]
 
-    BASE_YEAR = 2026   # used as reference for "current year"
+    BASE_YEAR = 2026   
 
     def __init__(self):
         self.model        = None
@@ -133,10 +121,6 @@ class MLEngine:
         self._known_areas: set = set()
         self._known_types: set = set()
         self._loaded = False
-
-    # ─────────────────────────────────────────────────────────────────
-    # MODEL LIFECYCLE — load, hot-swap, status
-    # ─────────────────────────────────────────────────────────────────
 
     def load(self, path: Optional[str] = None) -> bool:
         """
@@ -163,7 +147,7 @@ class MLEngine:
                 })
                 self.metadata.setdefault('loaded_at', datetime.utcnow().isoformat())
                 self._extract_known_categories()
-                self.cache.clear()   # invalidate stale predictions
+                self.cache.clear()   
                 self._loaded = True
 
             logger.info(
@@ -201,18 +185,13 @@ class MLEngine:
                 'known_types':       len(self._known_types),
                 'cache_size':        len(self.cache),
                 'cache_hit_rate':    self.cache.hit_rate,
-                # 🆕 Telemetry
+                
                 'predictions_total': total_preds,
                 'cache_hits_total':  stats['cache_hits'],
                 'errors_total':      stats['errors'],
                 'avg_latency_ms':    round(avg_latency, 2),
             }
 
-    # ─────────────────────────────────────────────────────────────────
-    # CORE PREDICTIONS — price, growth, confidence
-    # ─────────────────────────────────────────────────────────────────
-
-    # Telemetry counters
     _stats = {'predictions_total': 0, 'cache_hits': 0, 'errors': 0,
               'total_latency_ms': 0.0}
 
@@ -236,7 +215,6 @@ class MLEngine:
             return {'price': 0.0, 'confidence': 0, 'range': [0, 0], 'std': 0,
                     'error': 'model_not_loaded'}
 
-        # Normalize + cache lookup
         feats = self._normalize_features(features)
         cache_key = self._hash_features(feats)
         cached = self.cache.get(cache_key)
@@ -254,7 +232,6 @@ class MLEngine:
             X = self._build_feature_row(feats)
             X_transformed = self.preprocessor.transform(X)
 
-            # Per-tree predictions (200 of them)
             tree_preds = np.array([
                 tree.predict(X_transformed)[0]
                 for tree in self.model.estimators_
@@ -262,9 +239,6 @@ class MLEngine:
             mean_pred = float(tree_preds.mean())
             std_pred  = float(tree_preds.std())
 
-            # Confidence: inverse of coefficient of variation
-            # std/mean = 0     → confidence 100
-            # std/mean = 0.5   → confidence 0
             if mean_pred > 0:
                 cv = std_pred / mean_pred
                 confidence = max(0.0, min(100.0, 100.0 - cv * 200.0))
@@ -295,7 +269,6 @@ class MLEngine:
             return {'price': 0.0, 'confidence': 0, 'range': [0, 0], 'std': 0,
                     'error': str(e)}
 
-    # Year range the model was trained on (used for CAGR extraction)
     TRAINING_YEAR_MIN = 2019
     TRAINING_YEAR_MAX = 2026
 
@@ -334,7 +307,7 @@ class MLEngine:
             return self._cagr_fallback(features, years)
 
         try:
-            # Step 1 — current price (RF at base year)
+            
             now_features = {**features, 'year': self.TRAINING_YEAR_MAX}
             now_result   = self.predict_price(now_features)
             current_price = now_result['price']
@@ -342,23 +315,18 @@ class MLEngine:
             if current_price <= 0:
                 return self._cagr_fallback(features, years)
 
-            # Step 2 — historical price at start of training (RF at year 2019)
             start_features = {**features, 'year': self.TRAINING_YEAR_MIN}
             start_result   = self.predict_price(start_features)
             start_price    = start_result['price']
 
-            # Step 3 — derive PER-PROPERTY annual growth rate from RF history
-            # CAGR = (P_end / P_start)^(1/n) - 1
-            training_years = self.TRAINING_YEAR_MAX - self.TRAINING_YEAR_MIN  # 7
+            training_years = self.TRAINING_YEAR_MAX - self.TRAINING_YEAR_MIN  
             if start_price > 0 and training_years > 0:
                 annual_rate = (current_price / start_price) ** (1.0 / training_years) - 1.0
             else:
-                annual_rate = 0.055   # fallback
+                annual_rate = 0.055   
 
-            # 🆕 If RF predicts identical prices (rate ≈ 0), the feature combo
-            # is too rare in training data. Fall back to area-level CAGR from DB.
             method = 'ml_per_property_cagr'
-            if abs(annual_rate) < 0.005:   # < 0.5%/yr → likely a model artifact
+            if abs(annual_rate) < 0.005:   
                 try:
                     from models import Area
                     location = features.get('area') or features.get('location', '')
@@ -375,16 +343,14 @@ class MLEngine:
                             f"fell back to area CAGR {annual_rate*100:.2f}%/yr"
                         )
                     else:
-                        annual_rate = 0.05   # generic 5% baseline
+                        annual_rate = 0.05   
                         method = 'baseline_5pct'
                 except Exception:
                     annual_rate = 0.05
                     method = 'baseline_5pct'
 
-            # Sanity clamp: keep annual rate in plausible [0.5%, 20%] range
             annual_rate = max(0.005, min(0.20, annual_rate))
 
-            # Step 4 — extrapolate forward using compound interest
             multiplier   = (1 + annual_rate) ** years
             future_price = current_price * multiplier
             growth_pct   = (multiplier - 1.0) * 100
@@ -441,12 +407,9 @@ class MLEngine:
                     'deviation_pct': 0, 'predicted': 0,
                     'listed': listed_price, 'confidence': confidence}
 
-        # Signed deviation: positive means listed > predicted (overpriced)
         deviation = (listed_price - predicted) / predicted
         abs_dev   = abs(deviation)
 
-        # Only flag if confidence is reasonable (>= 50%)
-        # otherwise we don't trust our own prediction enough
         if confidence < 50:
             return {'is_anomaly': False, 'severity': None,
                     'reason': f'Low ML confidence ({confidence}%) — anomaly check skipped',
@@ -502,10 +465,6 @@ class MLEngine:
         }
         return self.predict_growth(archetype, years)
 
-    # ─────────────────────────────────────────────────────────────────
-    # HELPERS
-    # ─────────────────────────────────────────────────────────────────
-
     def _normalize_features(self, features: dict) -> dict:
         """
         Fill missing keys with sensible defaults, normalize types.
@@ -517,17 +476,15 @@ class MLEngine:
         area_in = str(features.get('area') or features.get('location') or 'Muscat')
         gov_in  = features.get('governorate') or self._guess_governorate(area_in)
 
-        # Cold-start: if area not known to the model, substitute with governorate
-        # (governorate is also in known_areas because it's commonly used as area)
         if self._known_areas and area_in not in self._known_areas:
-            # Try common variants first
+            
             variants = [area_in.title(), area_in.lower().title(),
                        f"{area_in}, {gov_in}", f"{area_in.title()}, {gov_in}"]
             matched = next((v for v in variants if v in self._known_areas), None)
             if matched:
                 area_in = matched
             elif gov_in in self._known_areas:
-                area_in = gov_in   # fall back to governorate name as area
+                area_in = gov_in   
 
         out = {
             'type':        str(features.get('type') or 'Apartment'),
@@ -586,7 +543,7 @@ class MLEngine:
         elif 'nizwa'   in a or 'نزوى'  in a: return 'Ad Dakhiliyah'
         elif 'sur'     in a or 'صور'   in a: return 'Ash Sharqiyah'
         elif 'duqm'    in a or 'دقم'   in a: return 'Al Wusta'
-        return 'Muscat'   # safe default
+        return 'Muscat'   
 
     def _derive_version(self, path: str) -> str:
         """Derive version string from file metadata."""
@@ -619,19 +576,12 @@ class MLEngine:
             'growth_pct':  round((multiplier - 1) * 100, 2),
             'annual_pct':  round(annual_rate * 100, 2),
             'multiplier':  round(multiplier, 6),
-            'confidence':  40,   # lower confidence — not ML
+            'confidence':  40,   
             'method':      'cagr_fallback',
             'years':       years,
         }
 
-
-# =============================================================================
-# 🌟 GLOBAL SINGLETON
-# =============================================================================
-
-# Single shared instance used across the entire Flask app
 ml = MLEngine()
-
 
 def init_ml_engine(model_path: Optional[str] = None) -> bool:
     """
@@ -639,10 +589,6 @@ def init_ml_engine(model_path: Optional[str] = None) -> bool:
     Loads the model from disk into the singleton.
     """
     return ml.load(model_path)
-
-# =============================================================================
-# 🚀 LEGACY ML UTILS (Migrated from ml_model.py)
-# =============================================================================
 
 def get_ml_investment_score(predicted_price, actual_price):
     if not actual_price or actual_price <= 0:
@@ -677,7 +623,6 @@ def get_future_multiplier(location: str, years: int,
     except Exception as e:
         pass
 
-    # Legacy CAGR fallback
     from models import Area
     annual_rate = 0.055
     if location and location.strip():

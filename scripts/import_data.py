@@ -8,11 +8,9 @@ from app import create_app
 from extensions import db
 from models import User, Property, PropertyImage
 
-# ── paths ────────────────────────────────────────────────────────────────────
 BASE_DIR   = os.path.abspath(os.path.dirname(__file__))
 SOURCE_DB  = os.path.join(BASE_DIR, "instance", "database", "realestate.db")
 
-# ── subcategory  →  Property.type mapping ────────────────────────────────────
 CATEGORY_MAP = {
     "villas for sale":       "Villa",
     "villas for rent":       "Villa",
@@ -46,7 +44,7 @@ def extract_size(title: str, surface_id) -> float:
             return float(str(surface_id).replace(",", ""))
         except Exception:
             pass
-    # fall back: scan title for e.g. "426 m2"
+    
     import re
     m = re.search(r"(\d[\d,]*)\s*m2", title or "", re.IGNORECASE)
     if m:
@@ -56,14 +54,12 @@ def extract_size(title: str, surface_id) -> float:
             pass
     return 0.0
 
-
 app = create_app()
 
 with app.app_context():
-    # Make sure Flask app tables exist
+    
     db.create_all()
 
-    # Get (or create) the agent user that will own imported listings
     agent = User.query.filter_by(email="agent@smartestate.com").first()
     if not agent:
         agent = User(username="agent_john", email="agent@smartestate.com", role="agent")
@@ -72,7 +68,6 @@ with app.app_context():
         db.session.commit()
         print("Created default agent user.")
 
-    # ── read rows from source DB ──────────────────────────────────────────────
     src_conn = sqlite3.connect(SOURCE_DB)
     src_conn.row_factory = sqlite3.Row
     src_cur  = src_conn.cursor()
@@ -116,7 +111,6 @@ with app.app_context():
         except Exception:
             pass
 
-        # Build location string
         city         = row["city"] or ""
         neighborhood = row["neighborhood"] or ""
         location     = f"{city}, {neighborhood}".strip(", ") if neighborhood else city
@@ -127,14 +121,12 @@ with app.app_context():
         prop_type = map_type(row["subcategory"])
         size      = extract_size(title, row["surface"])
 
-        # Collect image URLs (skip empties)
         image_urls = []
         for col in ["imageUrl", "img0", "img1", "img2", "img3", "img4"]:
             url = row[col]
             if url and url.startswith("http") and url not in image_urls:
                 image_urls.append(url)
 
-        # Create property record
         prop = Property(
             title       = title,
             description = description,
@@ -145,10 +137,9 @@ with app.app_context():
             agent_id    = agent.id,
         )
         db.session.add(prop)
-        db.session.flush()  # get prop.id before committing
+        db.session.flush()  
 
-        # Add image records (store the full URL as filename — routes must handle this)
-        for img_url in image_urls[:5]:   # max 5 images per property
+        for img_url in image_urls[:5]:   
             img = PropertyImage(image_filename=img_url, property_id=prop.id)
             db.session.add(img)
 

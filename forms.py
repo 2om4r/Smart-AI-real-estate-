@@ -72,7 +72,6 @@ class ProjectForm(FlaskForm):
     images = MultipleFileField('Project Images', validators=[FileAllowed(['jpg', 'png', 'jpeg'])])
     submit = SubmitField('Create Project')
 
-
 class UnitForm(FlaskForm):
     """
     نموذج إضافة وحدة (Unit) داخل مشروع موجود.
@@ -97,7 +96,6 @@ class UnitForm(FlaskForm):
                            default=1)
     images = MultipleFileField('Unit Images', validators=[FileAllowed(['jpg', 'png', 'jpeg'])])
     submit = SubmitField('Add Unit to Project')
-
 
 class SearchForm(FlaskForm):
     location = StringField('Location')

@@ -1,5 +1,3 @@
-# routes.py — All Flask routes for Smart AI Real Estate Oman
-# جميع مسارات التطبيق: API، صفحات، لوحات التحكم، الرسائل، التحليلات
 
 from flask import (Blueprint, render_template, url_for, flash,
                    redirect, request, jsonify, current_app, session)
@@ -22,14 +20,7 @@ from ml_engine import ml
 from ml_engine import get_future_multiplier, get_ml_investment_score
 from firebase import db as firebase_db
 
-# ─── Blueprint ────────────────────────────────────────────────────────────────
 main = Blueprint('main', __name__)
-
-
-# =============================================================================
-# 🔄 RAG HELPERS — silent wrappers, never raise
-# مساعدات RAG — لا تُوقف التطبيق عند الخطأ، تُسجَّل فقط تحذيرات
-# =============================================================================
 
 def _rag_update(property_id: int) -> None:
     """
@@ -43,7 +34,6 @@ def _rag_update(property_id: int) -> None:
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"[RAG] update skipped for property {property_id}: {e}")
-
 
 def _rag_delete(property_id: int) -> None:
     """
@@ -59,13 +49,8 @@ def _rag_delete(property_id: int) -> None:
         import logging
         logging.getLogger(__name__).warning(f"[RAG] delete skipped for property {property_id}: {e}")
 
-
-# =====================================================
-# 🤖 AI CHAT API
-# =====================================================
-
 @main.route("/api/chat", methods=["POST"])
-@limiter.limit("10 per minute")   # تحديد 10 طلبات في الدقيقة لكل IP
+@limiter.limit("10 per minute")   
 def chat_api():
     """
     واجهة المحادثة مع Ahmed 2.0
@@ -74,12 +59,12 @@ def chat_api():
     """
     data            = request.get_json()
     message         = data.get("message", "")
-    conversation_id = data.get("conversation_id")   # يُرسَل من الفرونت بعد أول رسالة
+    conversation_id = data.get("conversation_id")   
 
     user_id = current_user.id if current_user.is_authenticated else None
 
     try:
-        # get_ai_response يُدير الـ Conversation ويُسجّل في ChatLog داخليًا
+        
         reply = get_ai_response(message,
                                 user_id=user_id,
                                 conversation_id=conversation_id)
@@ -95,9 +80,6 @@ def chat_api():
             "conversation_id": conversation_id
         }), 500
 
-
-# ─── Chat Feedback ────────────────────────────────────────────────────────────
-
 @main.route("/api/chat/feedback", methods=["POST"])
 def chat_feedback():
     """
@@ -109,16 +91,13 @@ def chat_feedback():
     rating      = data.get("rating")
     comment     = data.get("comment", "")
 
-    # التحقق من المدخلات
     if chat_log_id is None or rating not in (0, 1):
         return jsonify({"error": "chat_log_id and rating (0 or 1) are required"}), 400
 
-    # التأكد أن الـ ChatLog موجود
     log = ChatLog.query.get(chat_log_id)
     if not log:
         return jsonify({"error": "Chat log not found"}), 404
 
-    # منع تكرار التقييم على نفس الرسالة
     if log.feedback:
         log.feedback.rating  = rating
         log.feedback.comment = comment
@@ -134,9 +113,6 @@ def chat_feedback():
     db.session.commit()
     return jsonify({"status": "saved", "chat_log_id": chat_log_id, "rating": rating})
 
-
-# ─── Admin Chat Analytics ─────────────────────────────────────────────────────
-
 @main.route("/api/admin/chat-analytics")
 @login_required
 def chat_analytics():
@@ -148,37 +124,31 @@ def chat_analytics():
     if current_user.role != 'admin':
         return jsonify({"error": "Admin access required"}), 403
 
-    # --- النطاق الزمني: آخر 24 ساعة ---
     since = datetime.utcnow() - timedelta(hours=24)
     logs  = ChatLog.query.filter(ChatLog.timestamp >= since).all()
 
     total_chats = len(logs)
 
-    # متوسط وقت الاستجابة (بالثواني)
     rt_values = [l.response_time for l in logs if l.response_time is not None]
     avg_response_time = round(sum(rt_values) / len(rt_values), 2) if rt_values else 0
 
-    # متوسط التوكنز
     tk_values = [l.tokens_used for l in logs if l.tokens_used is not None]
     avg_tokens = round(sum(tk_values) / len(tk_values), 1) if tk_values else 0
 
-    # التكلفة اليومية المقدّرة (GPT-4o-mini ≈ $0.000002 / token)
     total_tokens = sum(tk_values)
     daily_cost   = round(total_tokens * 0.000002, 4)
 
-    # توزيع النوايا (intent breakdown)
     intent_counts = {}
     for log in logs:
         key = log.intent or "unknown"
         intent_counts[key] = intent_counts.get(key, 0) + 1
 
-    # أكثر المواقع بحثًا — نستخرجها من رسائل المستخدم بكلمات مفتاحية
     location_keywords = [
         "muscat", "مسقط", "salalah", "صلالة", "barka", "بركاء",
         "sohar", "صحار", "nizwa", "نزوى", "sur", "صور",
         "duqm", "دقم", "rustaq", "الرستاق"
     ]
-    location_map = {   # توحيد الأسماء
+    location_map = {   
         "muscat": "Muscat", "مسقط": "Muscat",
         "salalah": "Salalah", "صلالة": "Salalah",
         "barka": "Barka", "بركاء": "Barka",
@@ -196,13 +166,11 @@ def chat_analytics():
                 canonical = location_map.get(kw, kw.title())
                 loc_counts[canonical] = loc_counts.get(canonical, 0) + 1
 
-    # ترتيب المواقع تنازليًا
     top_locations = sorted(
         [{"location": k, "count": v} for k, v in loc_counts.items()],
         key=lambda x: x["count"], reverse=True
     )[:5]
 
-    # معدل الرضا من ChatFeedback
     all_feedback = ChatFeedback.query.filter(
         ChatFeedback.timestamp >= since
     ).all()
@@ -212,45 +180,29 @@ def chat_analytics():
     return jsonify({
         "period":            "last_24h",
         "total_chats":       total_chats,
-        "avg_response_time": avg_response_time,   # seconds
+        "avg_response_time": avg_response_time,   
         "avg_tokens":        avg_tokens,
         "daily_cost_usd":    daily_cost,
         "intent_breakdown":  intent_counts,
         "top_locations":     top_locations,
-        "satisfaction_rate": satisfaction,         # % or null if no feedback yet
+        "satisfaction_rate": satisfaction,         
         "total_feedback":    len(all_feedback),
     })
-
-
-# =====================================================
-# 🗺️ INVESTMENT MAP API
-# =====================================================
 
 @main.route("/api/areas")
 def api_areas():
     areas = Area.query.all()
     return jsonify([a.to_dict() for a in areas])
 
-
 @main.route("/api/surooh_projects")
 def api_surooh_projects():
     props = Property.query.filter_by(is_surooh=True).all()
     return jsonify([p.to_dict() for p in props])
 
-
 @main.route("/api/omran_properties")
 def api_omran_properties():
     props = Property.query.filter_by(is_omran=True).all()
     return jsonify([p.to_dict() for p in props])
-
-
-# =====================================================
-# 🌲 ML ENGINE — status, predict, retrain, rollback, history
-# =====================================================
-
-# =====================================================
-# 🏥 HEALTH CHECK — for uptime monitoring (UptimeRobot, etc.)
-# =====================================================
 
 @main.route("/healthz")
 def healthz():
@@ -271,15 +223,13 @@ def healthz():
     degraded = False
     unhealthy = False
 
-    # ── 1. Database connectivity ─────────────────────────────────
     try:
         db.session.execute(db.text("SELECT 1"))
         checks['db'] = {'status': 'ok'}
     except Exception as e:
         checks['db'] = {'status': 'error', 'error': str(e)[:100]}
-        unhealthy = True   # DB is critical
+        unhealthy = True   
 
-    # ── 2. ML engine ─────────────────────────────────────────────
     try:
         from ml_engine import ml
         status = ml.status()
@@ -298,15 +248,13 @@ def healthz():
         checks['ml'] = {'status': 'error', 'error': str(e)[:100]}
         degraded = True
 
-    # ── 3. RAG (ChromaDB) ────────────────────────────────────────
     try:
         from rag_engine import search_knowledge_base
-        # If we can import the function the RAG module is healthy enough
+        
         checks['rag'] = {'status': 'ok'}
     except Exception as e:
         checks['rag'] = {'status': 'unknown', 'error': str(e)[:100]}
 
-    # ── 4. Scheduler ─────────────────────────────────────────────
     try:
         from extensions import scheduler
         if scheduler.running:
@@ -321,7 +269,6 @@ def healthz():
     except Exception as e:
         checks['scheduler'] = {'status': 'unknown', 'error': str(e)[:100]}
 
-    # ── Overall status ───────────────────────────────────────────
     if unhealthy:    overall = 'unhealthy'
     elif degraded:   overall = 'degraded'
     else:            overall = 'healthy'
@@ -338,7 +285,6 @@ def healthz():
     code = 200 if overall != 'unhealthy' else 503
     return jsonify(resp), code
 
-
 @main.route("/admin/ml-monitor")
 @login_required
 def admin_ml_monitor():
@@ -347,7 +293,6 @@ def admin_ml_monitor():
         flash('Admin access required.', 'danger')
         return redirect(url_for('main.dashboard'))
     return render_template('ml_monitor.html')
-
 
 @main.route("/api/ml/history")
 @login_required
@@ -366,7 +311,6 @@ def api_ml_history():
                .all())
     return jsonify([h.to_dict() for h in history])
 
-
 @main.route("/api/ml/retrain", methods=['POST'])
 @login_required
 @limiter.limit("3 per hour")
@@ -383,7 +327,7 @@ def api_ml_retrain():
     try:
         from scripts.retrain import run
         result = run(
-            force    = bool(data.get('force', True)),    # admin triggers usually force
+            force    = bool(data.get('force', True)),    
             dry_run  = bool(data.get('dry_run', False)),
             min_new  = int(data.get('min_new', 100)),
             min_days = int(data.get('min_days', 7)),
@@ -393,7 +337,6 @@ def api_ml_retrain():
     except Exception as e:
         logger.error(f"[ML] Manual retrain failed: {e}")
         return jsonify({'error': str(e), 'status': 'failed'}), 500
-
 
 @main.route("/api/ml/rollback", methods=['POST'])
 @login_required
@@ -414,7 +357,6 @@ def api_ml_rollback():
 
     data = request.get_json() or {}
 
-    # Find target version
     target = None
     if 'history_id' in data:
         target = TrainingHistory.query.get(int(data['history_id']))
@@ -430,12 +372,10 @@ def api_ml_rollback():
             'error': f'pickle file missing: {target.model_path}'
         }), 404
 
-    # Hot-swap into the live engine
     success = ml.hot_swap(target.model_path)
     if not success:
         return jsonify({'error': 'hot_swap_failed'}), 500
 
-    # Mark active in DB
     TrainingHistory.query.update({'is_active': False})
     target.is_active = True
     _db.session.commit()
@@ -445,7 +385,6 @@ def api_ml_rollback():
         'now_active':   target.to_dict(),
         'engine_status': ml.status(),
     })
-
 
 @main.route("/api/ml/status")
 def api_ml_status():
@@ -458,7 +397,6 @@ def api_ml_status():
         return jsonify(ml.status())
     except Exception as e:
         return jsonify({'error': str(e), 'loaded': False}), 500
-
 
 @main.route("/api/ml/predict", methods=['POST'])
 @limiter.limit("30 per minute")
@@ -478,7 +416,6 @@ def api_ml_predict():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 @main.route("/api/projects")
 def api_projects():
     """
@@ -489,10 +426,9 @@ def api_projects():
 
     out = []
     for p in projects:
-        # عَدّ الوحدات في المشروع
+        
         units_count = Property.query.filter_by(parent_project_id=p.id).count()
 
-        # ML score (يُحسب ديناميكياً)
         try:
             from ml_model import get_future_multiplier
             mult_5y = get_future_multiplier(p.location, 5)
@@ -515,16 +451,11 @@ def api_projects():
             'lat':             p.latitude,
             'lng':             p.longitude,
             'is_project':      True,
-            'projected_5y_growth_pct': growth_pct,    # 🆕 ML-driven
+            'projected_5y_growth_pct': growth_pct,    
             'agent':           p.agent.username if p.agent else 'unknown',
             'detail_url':      url_for('main.project_detail', project_id=p.id),
         })
     return jsonify(out)
-
-
-# =====================================================
-# 🏠 Home
-# =====================================================
 
 @main.route("/")
 @main.route("/home")
@@ -532,37 +463,17 @@ def home():
     properties = Property.query.order_by(Property.created_at.desc()).limit(6).all()
     return render_template('home.html', title='Home', properties=properties)
 
-
-# =====================================================
-# ℹ️ About
-# =====================================================
-
 @main.route("/about")
 def about():
     return render_template('about.html', title='About')
-
-
-# =====================================================
-# 🗺️ Investment Map Page
-# =====================================================
 
 @main.route("/investment-map")
 def investment_map():
     return render_template("investment_map.html")
 
-
-# =====================================================
-# 🤖 Ahmed 2.0 — Full-screen Chat Page
-# =====================================================
-
 @main.route("/ahmed-chat")
 def ahmed_chat():
     return render_template("ahmed_chat.html", title="Ahmed 2.0 — AI Advisor")
-
-
-# =====================================================
-# 📊 Real Estate Analytics
-# =====================================================
 
 @main.route("/analytics")
 def analytics():
@@ -571,25 +482,20 @@ def analytics():
     total_users      = User.query.count()
     total_agents     = User.query.filter_by(role='agent').count()
 
-    # Properties by type
     type_counts = db.session.query(
         Property.type, sqlfunc.count(Property.id)
     ).group_by(Property.type).all()
     type_labels = [t[0] for t in type_counts]
     type_values = [t[1] for t in type_counts]
 
-    # Properties by city/location (top 6)
     city_counts = db.session.query(
         Property.city, sqlfunc.count(Property.id)
-    ).filter(Property.city.isnot(None)).group_by(Property.city)\
-     .order_by(sqlfunc.count(Property.id).desc()).limit(6).all()
+    ).filter(Property.city.isnot(None)).group_by(Property.city)     .order_by(sqlfunc.count(Property.id).desc()).limit(6).all()
     city_labels = [c[0] or 'Unknown' for c in city_counts]
     city_values = [c[1] for c in city_counts]
 
-    # Average price
     avg_price = db.session.query(sqlfunc.avg(Property.price)).scalar() or 0
 
-    # Recent 6 properties
     recent = Property.query.order_by(Property.created_at.desc()).limit(6).all()
 
     return render_template(
@@ -605,11 +511,6 @@ def analytics():
         avg_price=avg_price,
         recent=recent,
     )
-
-
-# =====================================================
-# 🔐 Register
-# =====================================================
 
 @main.route("/register", methods=['GET', 'POST'])
 def register():
@@ -639,11 +540,6 @@ def register():
 
     return render_template('register.html', title='Register', form=form)
 
-
-# =====================================================
-# 🔐 Login
-# =====================================================
-
 @main.route("/login", methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -661,16 +557,10 @@ def login():
 
     return render_template('login.html', title='Login', form=form)
 
-
 @main.route("/logout")
 def logout():
     logout_user()
     return redirect(url_for('main.home'))
-
-
-# =====================================================
-# ⚙️ Settings
-# =====================================================
 
 @main.route("/settings", methods=['GET', 'POST'])
 @login_required
@@ -725,7 +615,6 @@ def settings():
                            security_form=security_form,
                            preferences_form=preferences_form)
 
-
 @main.route("/set_language/<lang>")
 def set_language(lang):
     if lang in ['en', 'ar']:
@@ -736,7 +625,6 @@ def set_language(lang):
             session['language'] = lang
     return redirect(request.referrer or url_for('main.home'))
 
-
 @main.route("/set_theme/<theme>")
 def set_theme(theme):
     if theme in ['light', 'dark']:
@@ -746,11 +634,6 @@ def set_theme(theme):
         else:
             session['theme'] = theme
     return redirect(request.referrer or url_for('main.home'))
-
-
-# =====================================================
-# 📊 Dashboard
-# =====================================================
 
 @main.route("/property/<int:property_id>/delete", methods=["POST"])
 @login_required
@@ -774,8 +657,6 @@ def delete_property(property_id):
         RecentlyViewed.query.filter_by(property_id=prop.id).delete()
         Message.query.filter_by(property_id=prop.id).update({'property_id': None})
 
-        # ── RAG: حذف وثيقة العقار من ChromaDB قبل حذفه من قاعدة البيانات ───
-        # Must run BEFORE db.session.delete so property_id is still meaningful
         _rag_delete(prop.id)
 
         db.session.delete(prop)
@@ -786,7 +667,6 @@ def delete_property(property_id):
         flash(f"Error deleting property: {str(e)}", "danger")
 
     return redirect(url_for('main.dashboard'))
-
 
 @main.route("/dashboard")
 @login_required
@@ -856,7 +736,7 @@ def dashboard():
                 p.score = calculate_score({
                     'type': p.type, 'price': safe_price, 'location': p.location
                 })
-                # Build feature dict for v2 ML engine
+                
                 feats = {
                     'type': p.type or 'Unknown',
                     'governorate': p.city or 'Muscat',
@@ -876,7 +756,7 @@ def dashboard():
                                properties=properties)
 
     else:
-        # Customer dashboard
+        
         favorites       = Favorite.query.filter_by(user_id=current_user.id).all()
         recently_viewed = RecentlyViewed.query.filter_by(
             user_id=current_user.id
@@ -951,7 +831,6 @@ def dashboard():
                                threads=threads_list,
                                recommended=recommended)
 
-
 @main.route("/api/reply_message", methods=["POST"])
 @login_required
 def reply_message():
@@ -965,7 +844,6 @@ def reply_message():
     msg = Message(sender_id=current_user.id, receiver_id=receiver_id, content=content)
     db.session.add(msg)
 
-    # Dynamic notification based on role
     role_name = "المشرف" if current_user.role == 'admin' else "الوكيل" if current_user.role == 'agent' else "العميل"
     notif = Notification(
         user_id=receiver_id,
@@ -981,10 +859,6 @@ def reply_message():
         "content":   msg.content,
         "timestamp": msg.timestamp.strftime("%H:%M")
     })
-
-# =====================================================
-# 🛡️ Admin Management API
-# =====================================================
 
 @main.route("/admin/delete_user/<int:user_id>", methods=["POST"])
 @login_required
@@ -1012,9 +886,7 @@ def admin_edit_role(user_id):
         user.role = new_role
         db.session.commit()
         flash(f"Role updated successfully for {user.username}.", "success")
-    return redirect(url_for('main.dashboard'))# =====================================================
-# ➕ Add / Edit Property
-# =====================================================
+    return redirect(url_for('main.dashboard'))
 
 @main.route("/property/new", methods=['GET', 'POST'])
 @login_required
@@ -1067,7 +939,6 @@ def new_property():
 
         db.session.commit()
 
-        # ── 🚨 ML ANOMALY CHECK: flag suspicious prices ──────────────────────
         try:
             from ml_engine import ml
             check = ml.detect_anomaly({
@@ -1092,7 +963,6 @@ def new_property():
                 elif check['severity'] == 'medium':
                     flash(f"ℹ️ {check['reason']}", 'info')
 
-            # ── 🎯 Log the prediction for active learning ────────────────────
             from models import PredictionLog
             import json as _json
             db.session.add(PredictionLog(
@@ -1110,19 +980,12 @@ def new_property():
         except Exception as e:
             logger.warning(f"[ML] Anomaly check skipped: {e}")
 
-        # ── RAG: فهرسة العقار الجديد فورًا في ChromaDB ──────────────────────
         _rag_update(prop.id)
 
         flash('Property added with images!', 'success')
         return redirect(url_for('main.dashboard'))
 
     return render_template('create_property.html', form=form)
-
-
-# =====================================================
-# 🏗️ PROJECT ROUTES — Multi-Unit Development System
-# نظام المشاريع: مشروع واحد يَحتوي عدَّة وحدات (شقق/فلل/...)
-# =====================================================
 
 @main.route("/project/new", methods=['GET', 'POST'])
 @login_required
@@ -1140,10 +1003,10 @@ def new_project():
         project = Property(
             title       = form.name.data,
             description = form.description.data,
-            price       = form.starting_price.data,  # سعر بدء المشروع
+            price       = form.starting_price.data,  
             location    = form.location.data,
-            type        = 'Project',                  # نوع خاص للمشاريع
-            size        = 0,                          # المشروع نفسه ليس له size
+            type        = 'Project',                  
+            size        = 0,                          
             city        = form.city.data,
             address     = form.address.data,
             agent_id    = current_user.id,
@@ -1154,12 +1017,11 @@ def new_project():
             total_units = form.total_units.data,
             investment_omr = form.investment_omr.data,
             status      = form.status.data,
-            is_project  = True,                       # ⭐ هذا مشروع!
+            is_project  = True,                       
         )
         db.session.add(project)
         db.session.commit()
 
-        # حفظ الصور
         if form.images.data and form.images.data[0]:
             for img_file in form.images.data:
                 if img_file and img_file.filename:
@@ -1175,7 +1037,6 @@ def new_project():
                     db.session.add(img)
             db.session.commit()
 
-        # تحديث RAG
         _rag_update(project.id)
 
         flash(f"✅ Project '{project.title}' created! Now add units.", 'success')
@@ -1183,18 +1044,16 @@ def new_project():
 
     return render_template('new_project.html', form=form)
 
-
 @main.route("/project/<int:project_id>")
 def project_detail(project_id):
     """صفحة عرض المشروع مع كل وحداته."""
     project = Property.query.get_or_404(project_id)
     if not project.is_project:
-        # ليس مشروعاً — رجِّع لصفحة العقار العاديَّة
+        
         return redirect(url_for('main.property_detail', property_id=project_id))
 
     units = project.units.all()
 
-    # إحصائيَّات المشروع
     if units:
         prices = [u.price for u in units if u.price]
         unit_types = {}
@@ -1215,7 +1074,6 @@ def project_detail(project_id):
     return render_template('project_detail.html',
                           project=project, units=units, stats=stats)
 
-
 @main.route("/project/<int:project_id>/add_unit", methods=['GET', 'POST'])
 @login_required
 def add_unit(project_id):
@@ -1230,18 +1088,18 @@ def add_unit(project_id):
 
     form = UnitForm()
     if form.validate_on_submit():
-        # كم وحدة نُضيف؟ (يَدعم إضافة عدَّة وحدات متماثلة دفعةً واحدة)
+        
         qty = max(1, min(form.quantity.data or 1, 200))
         created = []
         for i in range(qty):
-            # العنوان: إذا qty>1، نُضيف رقم تسلسلي
+            
             title = (f"{form.title.data} #{i+1}" if qty > 1 else form.title.data)
 
             unit = Property(
                 title       = title,
                 description = form.description.data,
                 price       = form.price.data,
-                location    = project.location,       # ← يَرِث من المشروع
+                location    = project.location,       
                 city        = project.city,
                 address     = project.address,
                 type        = form.type.data,
@@ -1253,7 +1111,7 @@ def add_unit(project_id):
                 longitude   = project.longitude,
                 status      = project.status,
                 is_project  = False,
-                parent_project_id = project.id,       # ← الربط بالمشروع!
+                parent_project_id = project.id,       
                 developer   = project.developer,
                 is_surooh   = project.is_surooh,
                 is_omran    = project.is_omran,
@@ -1262,7 +1120,6 @@ def add_unit(project_id):
             created.append(unit)
         db.session.commit()
 
-        # حفظ الصور للوحدة الأولى فقط (لتجنُّب تكرار الـ uploads)
         if form.images.data and form.images.data[0] and created:
             first_unit = created[0]
             for img_file in form.images.data:
@@ -1279,7 +1136,6 @@ def add_unit(project_id):
                     db.session.add(img)
             db.session.commit()
 
-        # تحديث RAG لكل الوحدات المُنشأة
         for u in created:
             _rag_update(u.id)
 
@@ -1288,7 +1144,6 @@ def add_unit(project_id):
         return redirect(url_for('main.project_detail', project_id=project.id))
 
     return render_template('add_unit.html', form=form, project=project)
-
 
 @main.route("/project/<int:project_id>/delete", methods=['POST'])
 @login_required
@@ -1304,19 +1159,16 @@ def delete_project(project_id):
 
     units_count = project.units.count()
 
-    # حذف كل الوحدات أولاً
     for unit in project.units.all():
         _rag_delete(unit.id)
         db.session.delete(unit)
 
-    # ثم المشروع نفسه
     _rag_delete(project.id)
     db.session.delete(project)
     db.session.commit()
 
     flash(f"✅ Project deleted with all {units_count} unit(s).", 'success')
     return redirect(url_for('main.dashboard'))
-
 
 @main.route("/property/<int:property_id>/edit", methods=['GET', 'POST'])
 @login_required
@@ -1358,7 +1210,6 @@ def edit_property(property_id):
 
         db.session.commit()
 
-        # ── RAG: تحديث وثيقة العقار في ChromaDB بعد التعديل ────────────────
         _rag_update(prop.id)
 
         flash('Property updated successfully!', 'success')
@@ -1379,11 +1230,6 @@ def edit_property(property_id):
         form.longitude.data   = prop.longitude
 
     return render_template('edit_property.html', form=form, property=prop)
-
-
-# =====================================================
-# 🎯 ACTIVE LEARNING — mark property sold (ground truth)
-# =====================================================
 
 @main.route("/property/<int:property_id>/mark_sold", methods=['POST'])
 @login_required
@@ -1407,7 +1253,6 @@ def mark_property_sold(property_id):
     if actual_price <= 0:
         return jsonify({'error': 'actual_price must be > 0'}), 400
 
-    # Update property
     prop.sold_price = actual_price
     prop.sold_date  = datetime.utcnow()
     prop.status     = 'sold'
@@ -1415,7 +1260,6 @@ def mark_property_sold(property_id):
         delta = datetime.utcnow() - prop.created_at
         prop.days_on_market = max(1, delta.days)
 
-    # ── Update prediction log with ground truth ─────────────────────
     from models import PredictionLog
     logs = PredictionLog.query.filter_by(property_id=prop.id).all()
     for log in logs:
@@ -1435,7 +1279,6 @@ def mark_property_sold(property_id):
         'ml_error_pct':   (abs(actual_price - prop.ml_predicted_at_listing) /
                           actual_price * 100) if prop.ml_predicted_at_listing else None,
     })
-
 
 @main.route("/api/ml/accuracy")
 def api_ml_accuracy():
@@ -1467,7 +1310,6 @@ def api_ml_accuracy():
         'accuracy_within_20pct': round(within_20 / len(errors) * 100, 1) if errors else 0,
     })
 
-
 @main.route("/property/<int:property_id>")
 def property_detail(property_id):
     prop = Property.query.get_or_404(property_id)
@@ -1476,11 +1318,6 @@ def property_detail(property_id):
         db.session.add(rv)
         db.session.commit()
     return render_template('property_detail.html', property=prop)
-
-
-# =====================================================
-# 🔍 Search
-# =====================================================
 
 @main.route("/search")
 def search():
@@ -1522,7 +1359,6 @@ def search():
             ), reverse=True
         )
 
-    # Manual Pagination
     page = request.args.get('page', 1, type=int)
     per_page = 12
     total = len(results)
@@ -1538,11 +1374,6 @@ def search():
                            total_results=total,
                            surooh_only=surooh_only,
                            omran_only=omran_only)
-
-
-# =====================================================
-# ❤️ Favorite API
-# =====================================================
 
 @main.route("/favorite/<int:property_id>", methods=["POST"])
 @login_required
@@ -1561,7 +1392,6 @@ def toggle_favorite(property_id):
     db.session.commit()
     return jsonify({"status": "added", "property_id": property_id})
 
-
 @main.route("/api/favorites")
 def api_favorites():
     if not current_user.is_authenticated:
@@ -1569,11 +1399,6 @@ def api_favorites():
     favs    = Favorite.query.filter_by(user_id=current_user.id).all()
     fav_ids = [f.property_id for f in favs]
     return jsonify({"favorite_ids": fav_ids})
-
-
-# =====================================================
-# 💬 Messaging API
-# =====================================================
 
 @main.route("/api/send_message", methods=["POST"])
 @login_required
@@ -1604,11 +1429,6 @@ def send_message():
 
     return jsonify({"status": "sent", "message_id": msg.id})
 
-
-# =====================================================
-# 🔔 Notifications API
-# =====================================================
-
 @main.route("/api/notifications")
 @login_required
 def api_notifications():
@@ -1622,7 +1442,6 @@ def api_notifications():
         "timestamp": n.timestamp.strftime("%H:%M")
     } for n in notifs])
 
-
 @main.route("/api/notifications/read/<int:notif_id>", methods=["POST"])
 @login_required
 def mark_notif_read(notif_id):
@@ -1633,20 +1452,18 @@ def mark_notif_read(notif_id):
     db.session.commit()
     return jsonify({"status": "success"})
 
-
 @main.route("/api/messages/<int:user_id>")
 @login_required
 def api_messages(user_id):
     if current_user.role not in ['agent', 'admin'] and current_user.id != user_id:
         return jsonify({"error": "Unauthorized"}), 403
 
-    # Fetch 1-on-1 conversation
     msgs = Message.query.filter(
         ((Message.sender_id == current_user.id) & (Message.receiver_id == user_id)) |
         ((Message.sender_id == user_id) & (Message.receiver_id == current_user.id))
     ).order_by(Message.timestamp.desc()).limit(50).all()
 
-    all_msgs = msgs[::-1]  # reverse to chronological order
+    all_msgs = msgs[::-1]  
 
     return jsonify([{
         "id":          m.id,
@@ -1659,11 +1476,6 @@ def api_messages(user_id):
         "timestamp":   m.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
         "is_mine":     m.sender_id == current_user.id
     } for m in all_msgs])
-
-
-# =====================================================
-# 📈 AI Price Predictor API
-# =====================================================
 
 @main.route("/api/predict_price", methods=["POST"])
 @limiter.limit("30 per minute; 500 per hour")
@@ -1692,7 +1504,6 @@ def predict_price_api():
     if price <= 0:
         return jsonify({"error": "Valid price required"}), 400
 
-    # ── Normalize Omani location aliases ────────────────────────────
     _loc_aliases = {
         'alburaimi': 'Al Buraimi', 'buraimi': 'Al Buraimi', 'al-buraimi': 'Al Buraimi',
         'almouj':    'Al Mouj',    'mouj':    'Al Mouj',    'al-mouj':    'Al Mouj',
@@ -1707,7 +1518,6 @@ def predict_price_api():
     if _norm in _loc_aliases:
         loc = _loc_aliases[_norm]
 
-    # ── Build full feature dict for ML ──────────────────────────────
     features = {
         'type':       ptype,
         'area':       loc or 'Muscat',
@@ -1717,20 +1527,17 @@ def predict_price_api():
         'floor':      float(data.get('floor', 0)),
     }
 
-    # ── Call ml_engine for 5-year growth (single call, cached) ──────
     growth_5y = ml.predict_growth(features, years=5)
     method = growth_5y.get('method', '')
-    # Any ml_* method means RF was used (per-property or with area fallback)
+    
     ml_used = method.startswith('ml_')
 
-    annual_rate = growth_5y['annual_pct'] / 100   # decimal form
+    annual_rate = growth_5y['annual_pct'] / 100   
     val_1y = price * (1 + annual_rate)
     val_5y = price * growth_5y['multiplier']
 
-    # ── Get ML confidence from current-year prediction ──────────────
     current_pred = ml.predict_price({**features, 'year': 2026})
 
-    # ── Year-by-year projection (compound from RF-derived rate) ─────
     projection = []
     for yr in range(0, 11):
         m = (1 + annual_rate) ** yr
@@ -1739,21 +1546,17 @@ def predict_price_api():
             "value": round(price * m, 0),
         })
 
-    # ── 🆕 Market comparison: area average + governorate average ────
-    # نَحسب نمو متوسط للمنطقة (archetype) ونمو المحافظة لتَوفير سياق
     area_projection = []
     gov_projection  = []
     try:
-        # Area-level archetype growth
+        
         area_growth = ml.predict_area_growth(loc, years=5)
         area_annual = area_growth['annual_pct'] / 100
 
-        # Governorate-level: use a different proxy area
         gov = ml._guess_governorate(loc)
         gov_growth = ml.predict_area_growth(gov, years=5) if gov != loc else area_growth
         gov_annual = gov_growth['annual_pct'] / 100
 
-        # Same starting price for all three series so the chart compares % growth fairly
         for yr in range(0, 11):
             area_projection.append({
                 "year":  yr,
@@ -1768,14 +1571,12 @@ def predict_price_api():
         area_projection = projection
         gov_projection  = projection
 
-    # ── Rental ROI assumption by type (kept as industry standard) ───
     if   "villa"      in ptype.lower(): rent_pct = 0.065
     elif "land"       in ptype.lower(): rent_pct = 0.090
     elif "townhouse"  in ptype.lower(): rent_pct = 0.070
     elif "commercial" in ptype.lower(): rent_pct = 0.085
     else:                               rent_pct = 0.075
 
-    # Reason text varies by method (transparent about what was used)
     if method == 'ml_per_property_cagr':
         reason = (
             f"ML-predicted {annual_rate * 100:.2f}%/yr growth from per-property "
@@ -1799,7 +1600,6 @@ def predict_price_api():
             f"(ml_engine not available)."
         )
 
-    # ── Cold-start + Confidence band info ──────────────────────────
     is_cold_start  = ml.is_cold_start_area(loc) if loc else False
     confidence_band = ml.confidence_band(growth_5y.get('confidence', 0))
     cold_start_msg = None
@@ -1819,23 +1619,18 @@ def predict_price_api():
         "ml_powered":       ml_used,
         "ml_method":        growth_5y.get('method'),
         "ml_confidence":    growth_5y.get('confidence'),
-        "confidence_band":  confidence_band,        # 🆕 'high' | 'medium' | 'low'
-        "cold_start":       is_cold_start,           # 🆕 unknown area flag
+        "confidence_band":  confidence_band,        
+        "cold_start":       is_cold_start,           
         "cold_start_msg":   cold_start_msg,
         "price_range":      current_pred.get('range'),
         "reason":            reason,
-        "projection":        projection,            # this property
-        "area_projection":   area_projection,        # 🆕 area average
-        "gov_projection":    gov_projection,         # 🆕 governorate average
+        "projection":        projection,            
+        "area_projection":   area_projection,        
+        "gov_projection":    gov_projection,         
         "current_price":     round(price, 0),
         "ml_estimated":      round(current_pred.get('price', 0), 0),
         "location":          loc or "Oman",
     })
-
-
-# =====================================================
-# 🏠 Customer Recommendations API
-# =====================================================
 
 @main.route("/api/recommendations")
 def api_recommendations():
@@ -1850,11 +1645,6 @@ def api_recommendations():
 
     scored.sort(key=lambda x: x["score"], reverse=True)
     return jsonify(scored[:6])
-
-
-# =====================================================
-# ✉️ Agent Messages
-# =====================================================
 
 @main.route("/agent/messages")
 @login_required
@@ -1895,7 +1685,6 @@ def agent_messages_inbox():
     return render_template('dashboard_messages.html',
                            threads=agent_threads_list,
                            active_thread_id=None)
-
 
 @main.route("/agent/messages/<int:customer_id>")
 @login_required
@@ -1948,12 +1737,6 @@ def agent_message_thread(customer_id):
                            active_customer=active_customer,
                            thread_msgs=thread_msgs)
 
-
-# =============================================================================
-# 💼 INVESTMENT REQUESTS API
-# واجهة طلبات الاستثمار — Intent F من الشاتبوت
-# =============================================================================
-
 @main.route("/api/investment_requests")
 @login_required
 def api_investment_requests():
@@ -1967,8 +1750,6 @@ def api_investment_requests():
     if current_user.role not in ('agent', 'admin'):
         return jsonify({"error": "Agent access required"}), 403
 
-    # Admin sees all requests; agent sees only their own
-    # المشرف يرى جميع الطلبات؛ الوكيل يرى طلباته فقط
     if current_user.role == 'admin':
         requests_q = InvestmentRequest.query.order_by(
             InvestmentRequest.timestamp.desc()
@@ -1988,7 +1769,6 @@ def api_investment_requests():
         "timestamp": r.timestamp.strftime("%Y-%m-%d %H:%M"),
     } for r in requests_q])
 
-
 @main.route("/api/investment_requests/<int:req_id>/status", methods=["POST"])
 @login_required
 def update_investment_request_status(req_id):
@@ -2004,7 +1784,6 @@ def update_investment_request_status(req_id):
 
     req = InvestmentRequest.query.get_or_404(req_id)
 
-    # وكيل يمكنه تعديل طلباته فقط
     if current_user.role == 'agent' and req.agent_id != current_user.id:
         return jsonify({"error": "Not your request"}), 403
 

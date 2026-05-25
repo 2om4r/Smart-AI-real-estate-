@@ -6,7 +6,7 @@ from models import User, Property
 def fix_agents():
     app = create_app()
     with app.app_context():
-        # 1. Guarantee agents exist
+        
         agents_data = [
             ('surooh_agent', 'surooh@smartestate.com', 'govagent123'),
             ('omran_agent', 'omran@smartestate.com', 'govagent123'),
@@ -24,7 +24,6 @@ def fix_agents():
                 db.session.commit()
             agent_map[username] = user
 
-        # 2. Iterate all properties and enforce ownership
         properties = Property.query.all()
         surooh_count = 0
         omran_count = 0

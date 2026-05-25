@@ -1,14 +1,3 @@
-# rag_engine.py — RAG (Retrieval-Augmented Generation) Engine
-# محرك الاسترجاع المعزز للمعرفة — يفهرس العقارات والمناطق ويبحث فيها
-#
-# يستخدم ChromaDB كقاعدة بيانات متجهة و OpenAI text-embedding-3-small للتضمين.
-# Uses ChromaDB as a vector store and OpenAI text-embedding-3-small for embeddings.
-#
-# Public API:
-#   build_knowledge_base()            — full rebuild (called on app start)
-#   search_knowledge_base(query, k=5) — semantic search, returns context string
-#   update_property_in_rag(id)        — incremental upsert after add/edit
-#   delete_property_from_rag(id)      — remove after delete
 
 from __future__ import annotations
 
@@ -22,38 +11,18 @@ from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-# =============================================================================
-# ⚙️ CONSTANTS
-# الثوابت — قابلة للتغيير عبر متغيرات البيئة أو مباشرةً
-# =============================================================================
-
 CHROMA_PATH     = os.environ.get("CHROMA_DB_PATH", "./chroma_db")
-COLLECTION_NAME = "real_estate_oman"       # اسم المجموعة في ChromaDB
-EMBED_MODEL     = "text-embedding-3-small" # نموذج OpenAI للتضمين
-BATCH_SIZE      = 100                      # عدد الوثائق في كل دفعة تضمين
-DISTANCE_FILTER = 0.8                      # حد المسافة الكوسينية (أقل = أكثر تشابهًا)
-                                           # cosine distance threshold; lower = more relevant
-
-
-# =============================================================================
-# 🔌 CLIENTS (module-level singletons)
-# عملاء الخدمات — يُنشأ مرة واحدة عند تحميل الوحدة
-# =============================================================================
-
-# OpenAI client — المفتاح من متغيرات البيئة فقط
+COLLECTION_NAME = "real_estate_oman"       
+EMBED_MODEL     = "text-embedding-3-small" 
+BATCH_SIZE      = 100                      
+DISTANCE_FILTER = 0.8                      
+                                           
 _openai = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-# ChromaDB PersistentClient — يحفظ البيانات على القرص بين إعادات التشغيل
 _chroma = chromadb.PersistentClient(
     path=CHROMA_PATH,
-    settings=Settings(anonymized_telemetry=False),  # لا نرسل بيانات مجهولة لـ Chroma
+    settings=Settings(anonymized_telemetry=False),  
 )
-
-
-# =============================================================================
-# 🔧 INTERNAL HELPERS
-# دوال داخلية مساعدة — لا تُستخدم خارج هذه الوحدة
-# =============================================================================
 
 def _get_collection() -> chromadb.Collection:
     """
@@ -66,7 +35,6 @@ def _get_collection() -> chromadb.Collection:
         name=COLLECTION_NAME,
         metadata={"hnsw:space": "cosine"},
     )
-
 
 def _embed(texts: List[str]) -> List[List[float]]:
     """
@@ -81,7 +49,6 @@ def _embed(texts: List[str]) -> List[List[float]]:
         input=texts,
     )
     return [item.embedding for item in response.data]
-
 
 def _property_to_text(prop) -> str:
     """
@@ -102,7 +69,6 @@ def _property_to_text(prop) -> str:
     status     = prop.status   or "available"
     city       = prop.city     or prop.location or ""
 
-    # ── Case 1: PROJECT (is_project=True) — bilingual, detailed ───────────
     if getattr(prop, 'is_project', False):
         developer       = prop.developer or "غير محدَّد"
         completion      = prop.completion_date or "TBD"
@@ -128,7 +94,6 @@ def _property_to_text(prop) -> str:
             f"الوصف: {(prop.description or '')[:300]}"
         )
 
-    # ── Case 2: UNIT inside a project — link to parent ────────────────────
     parent_label = ""
     try:
         if prop.parent_project_id and prop.parent_project:
@@ -139,7 +104,6 @@ def _property_to_text(prop) -> str:
     except Exception:
         pass
 
-    # ── Case 3: Regular property (default) ─────────────────────────────────
     return (
         f"عقار: {prop.title} | "
         f"نوع: {prop.type} | "
@@ -154,7 +118,6 @@ def _property_to_text(prop) -> str:
         f"الحالة: {status}"
         f"{parent_label}"
     )
-
 
 def _area_to_text(area) -> str:
     """
@@ -171,12 +134,6 @@ def _area_to_text(area) -> str:
         f"التوصية: {area.recommendation} | "
         f"السكور: {round(area.score, 1)}/100"
     )
-
-
-# =============================================================================
-# 📦 BUILD KNOWLEDGE BASE  —  full rebuild
-# بناء قاعدة المعرفة من الصفر — يُستدعى عند بدء التطبيق
-# =============================================================================
 
 def build_knowledge_base() -> None:
     """
@@ -200,30 +157,23 @@ def build_knowledge_base() -> None:
       4. التضمين والإدراج على دفعات
       5. تسجيل التقدم
     """
-    # Lazy import to avoid circular import at module level
-    # استيراد متأخر لتجنب الاستيراد الدائري
+    
     from models import Property, Area
 
     logger.info("[RAG] Starting full knowledge-base rebuild...")
 
-    # ── 1. Drop old collection for a clean slate ──────────────────────────────
-    # حذف المجموعة القديمة — يُتجاهَل الخطأ إن لم تكن موجودة (أول تشغيل)
     try:
         _chroma.delete_collection(COLLECTION_NAME)
         logger.info("[RAG] Old collection deleted.")
     except Exception:
-        pass  # does not exist on first run — that's fine
+        pass  
 
-    # ── 2. Create fresh collection ────────────────────────────────────────────
     collection = _get_collection()
 
-    # ── 3. Collect documents ──────────────────────────────────────────────────
-    # جمع النصوص والمعرّفات والبيانات الوصفية
     docs:      List[str]  = []
     doc_ids:   List[str]  = []
     metadatas: List[dict] = []
 
-    # --- Properties -----------------------------------------------------------
     properties = Property.query.all()
     for prop in properties:
         try:
@@ -233,7 +183,6 @@ def build_knowledge_base() -> None:
         except Exception as e:
             logger.warning(f"[RAG] Skipping property id={prop.id}: {e}")
 
-    # --- Areas ----------------------------------------------------------------
     areas = Area.query.all()
     for area in areas:
         try:
@@ -250,8 +199,6 @@ def build_knowledge_base() -> None:
     total   = len(docs)
     indexed = 0
 
-    # ── 4. Embed + upsert in batches ──────────────────────────────────────────
-    # التضمين والإدراج على دفعات لتجنب تجاوز حدود OpenAI API وضمان الأداء
     for i in range(0, total, BATCH_SIZE):
         batch_docs  = docs[i : i + BATCH_SIZE]
         batch_ids   = doc_ids[i : i + BATCH_SIZE]
@@ -273,12 +220,6 @@ def build_knowledge_base() -> None:
             )
 
     logger.info(f"[RAG] Knowledge base ready. {indexed}/{total} documents indexed.")
-
-
-# =============================================================================
-# 🔍 SEARCH KNOWLEDGE BASE
-# البحث الدلالي — يُستدعى من get_ai_response() في ai_utils.py
-# =============================================================================
 
 def search_knowledge_base(query: str, k: int = 5) -> str:
     """
@@ -304,7 +245,6 @@ def search_knowledge_base(query: str, k: int = 5) -> str:
     try:
         collection = _get_collection()
 
-        # تضمين الاستعلام — يستخدم نفس النموذج المُستخدَم عند الفهرسة
         query_embedding = _embed([query])[0]
 
         results = collection.query(
@@ -316,8 +256,6 @@ def search_knowledge_base(query: str, k: int = 5) -> str:
         documents: List[str]  = results.get("documents", [[]])[0]
         distances: List[float] = results.get("distances",  [[]])[0]
 
-        # تصفية النتائج التي تتجاوز حد المسافة (بعيدة عن الاستعلام = غير ذات صلة)
-        # Keep only results whose cosine distance is below DISTANCE_FILTER
         filtered = [
             doc
             for doc, dist in zip(documents, distances)
@@ -332,13 +270,7 @@ def search_knowledge_base(query: str, k: int = 5) -> str:
 
     except Exception as e:
         logger.error(f"[RAG] search_knowledge_base failed: {e}")
-        return ""  # graceful degradation — GPT still runs without RAG context
-
-
-# =============================================================================
-# 🔄 UPDATE — single property (after add or edit)
-# تحديث عقار واحد بعد إضافته أو تعديله
-# =============================================================================
+        return ""  
 
 def update_property_in_rag(property_id: int) -> None:
     """
@@ -353,7 +285,7 @@ def update_property_in_rag(property_id: int) -> None:
       - إضافة عقار جديد
       - تعديل عقار موجود
     """
-    from models import Property  # lazy import
+    from models import Property  
 
     doc_id = f"prop_{property_id}"
 
@@ -366,7 +298,6 @@ def update_property_in_rag(property_id: int) -> None:
         text      = _property_to_text(prop)
         embedding = _embed([text])[0]
 
-        # upsert — يُحدَّث إن وُجد، يُنشأ إن لم يُوجد
         _get_collection().upsert(
             documents  = [text],
             ids        = [doc_id],
@@ -377,12 +308,6 @@ def update_property_in_rag(property_id: int) -> None:
 
     except Exception as e:
         logger.error(f"[RAG] update_property_in_rag({property_id}) failed: {e}")
-
-
-# =============================================================================
-# 🗑️ DELETE — single property (after delete)
-# حذف عقار واحد من قاعدة المعرفة بعد حذفه من قاعدة البيانات
-# =============================================================================
 
 def delete_property_from_rag(property_id: int) -> None:
     """

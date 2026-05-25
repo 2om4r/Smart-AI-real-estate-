@@ -10,7 +10,6 @@ from extensions import db
 from models import User, Property
 from werkzeug.security import generate_password_hash
 
-# ── City → (lat, lng) lookup ────────────────────────────────────────────────
 CITY_COORDS = {
     'muscat':         (23.5880, 58.3829),
     'al amerat':      (23.5100, 58.5200),
@@ -32,19 +31,18 @@ def city_coords(city_str):
     for k, v in CITY_COORDS.items():
         if k in key or key in k:
             return v
-    return (23.5880, 58.3829)   # Default: Muscat
+    return (23.5880, 58.3829)   
 
 DB_DIR   = os.path.join(os.path.dirname(__file__), 'instance', 'database')
 SUROOH_DB = os.path.join(DB_DIR, 'surooh.db')
 S_DB      = os.path.join(DB_DIR, 's.db')
 
-SUROOH_TAG = '[Surooh]'   # prefix to detect existing imports
+SUROOH_TAG = '[Surooh]'   
 
 def seed():
     app = create_app()
     with app.app_context():
 
-        # ── 1. Create surooh_agent ─────────────────────────────────────────
         agent = User.query.filter_by(username='surooh_agent').first()
         if not agent:
             agent = User(
@@ -61,7 +59,6 @@ def seed():
 
         agent_id = agent.id
 
-        # ── 2. Import individual units from s.db ───────────────────────────
         existing_titles = {p.title for p in Property.query.filter(
             Property.title.like(f'{SUROOH_TAG}%')).all()}
 
@@ -80,7 +77,7 @@ def seed():
                 beds  = r['Bedrooms'] or 0
                 area  = r['Area_m2']  or 0
                 ptype = r['Property_Type'] or 'Villa'
-                # Normalise type to match existing enum
+                
                 type_map = {'twin villa': 'Villa', 'villa': 'Villa',
                             'apartment': 'Apartment', 'townhouse': 'Townhouse'}
                 ptype_norm = type_map.get(ptype.lower(), 'Villa')
@@ -110,7 +107,6 @@ def seed():
         else:
             print(f'⚠️  s.db not found at {S_DB}')
 
-        # ── 3. Import project-level entries from surooh.db ─────────────────
         imported_p = 0
         if os.path.exists(SUROOH_DB):
             conn = sqlite3.connect(SUROOH_DB)

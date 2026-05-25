@@ -12,7 +12,6 @@ DB_DIR  = os.path.join(os.path.dirname(__file__), 'instance', 'database')
 O_DB    = os.path.join(DB_DIR, 'O.db')
 OMRAN_TAG = '[OMRAN]'
 
-# ── Project specific coordinates ──────────────────────────────────────────
 PROJECT_COORDS = {
     'Al Mouj Muscat':         (23.6194, 58.2793),
     'Saraya Bandar Jissah':   (23.5503, 58.6382),
@@ -38,12 +37,11 @@ CITY_COORDS = {
 }
 
 def get_coords(project_name, city_name):
-    # Try project match first
+    
     for p, coords in PROJECT_COORDS.items():
         if p.lower() in project_name.lower():
             return coords
     
-    # Fallback to city
     if not city_name: return (23.5880, 58.3829)
     key = city_name.lower().strip()
     for k, v in CITY_COORDS.items():
@@ -53,12 +51,11 @@ def get_coords(project_name, city_name):
 
 import random
 def apply_jitter(lat, lng):
-    # Add small random offset so multiple properties in same project don't stack
+    
     jitter_lat = (random.random() - 0.5) * 0.005
     jitter_lng = (random.random() - 0.5) * 0.005
     return lat + jitter_lat, lng + jitter_lng
 
-# Type normalisation
 TYPE_MAP = {
     'villa':     'Villa',
     'apartment': 'Apartment',
@@ -71,7 +68,6 @@ def seed():
     app = create_app()
     with app.app_context():
 
-        # ── 1. Create omran_agent ─────────────────────────────────────────
         agent = User.query.filter_by(username='omran_agent').first()
         if not agent:
             agent = User(
@@ -88,13 +84,11 @@ def seed():
 
         agent_id = agent.id
 
-        # ── 2. Clean existing OMRAN data ──────────────────────────────────
         deleted = Property.query.filter_by(is_omran=True).delete()
         db.session.commit()
         if deleted:
             print(f'🗑️  Deleted {deleted} existing OMRAN properties for clean re-seed.')
 
-        # ── 3. Import from O.db ────────────────────────────────────────────
         if not os.path.exists(O_DB):
             print(f'❌ O.db not found at {O_DB}')
             return

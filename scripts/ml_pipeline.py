@@ -54,38 +54,25 @@ from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.model_selection import cross_val_score
 
-# ── Project root on path ─────────────────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 logging.basicConfig(level=logging.INFO, format='[%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 📁 PATHS
-# ─────────────────────────────────────────────────────────────────────────────
 
 PROJECT_ROOT  = Path(__file__).parent.parent
 SOURCE_DB     = Path(os.environ.get("SOURCE_DB",
                                     "/Users/omar/Desktop/omanpDatabase.db"))
 REGISTRY_DIR  = PROJECT_ROOT / "models" / "registry"
 LATEST_LINK   = REGISTRY_DIR / "latest.pkl"
-LEGACY_PICKLE = PROJECT_ROOT / "ml_model_trained.pkl"   # for backward compat
+LEGACY_PICKLE = PROJECT_ROOT / "ml_model_trained.pkl"   
 
 TABLE_NAME = "oman properties 2000"
 PRICE_COLS = [f'Price_{y}_OMR' for y in range(2019, 2027)]
 YEARS      = list(range(2019, 2027))
 
-# Minimum acceptable model quality
 MIN_R2_SCORE = 0.70
 
-# Registry retention policy
 MAX_VERSIONS_TO_KEEP = 5
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 🔍 STAGE 1 — Check if retrain is worthwhile
-# ─────────────────────────────────────────────────────────────────────────────
 
 def should_retrain(min_new: int = 100, min_days: int = 7,
                    force: bool = False) -> tuple[bool, str]:
@@ -127,11 +114,6 @@ def should_retrain(min_new: int = 100, min_days: int = 7,
             f"{days_since} days old ({min_days} required)"
         )
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 📦 STAGE 2 — Load + combine data sources
-# ─────────────────────────────────────────────────────────────────────────────
-
 def load_baseline_data() -> pd.DataFrame:
     """Load original 2,000 properties × 8 years = 16,000 rows from omanpDatabase.db."""
     if not SOURCE_DB.exists():
@@ -143,7 +125,6 @@ def load_baseline_data() -> pd.DataFrame:
     conn.close()
     logger.info(f"Loaded baseline: {len(df)} properties")
 
-    # Clean nulls
     df['Sqm']       = pd.to_numeric(df['Sqm'],       errors='coerce').fillna(0)
     df['Bedrooms']  = pd.to_numeric(df['Bedrooms'],  errors='coerce').fillna(0)
     df['Bathrooms'] = pd.to_numeric(df['Bathrooms'], errors='coerce').fillna(0)
@@ -152,7 +133,6 @@ def load_baseline_data() -> pd.DataFrame:
     for col in PRICE_COLS:
         df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
     return df
-
 
 def load_new_properties_from_app_db() -> pd.DataFrame:
     """
@@ -167,8 +147,7 @@ def load_new_properties_from_app_db() -> pd.DataFrame:
 
     app = create_app()
     with app.app_context():
-        # Only include real properties (not project headers, must have price)
-        # Property model uses .size for area (not .sqm)
+        
         if hasattr(Property, 'is_project'):
             props = Property.query.filter(
                 Property.is_project == False,
@@ -176,12 +155,12 @@ def load_new_properties_from_app_db() -> pd.DataFrame:
             ).all()
         else:
             props = Property.query.filter(Property.price > 0).all()
-        # Filter out rows missing size (we need it as a feature)
+        
         props = [p for p in props if (p.size or 0) > 0]
 
         records = []
         for p in props:
-            # 🎯 Active Learning: prefer sold_price (confirmed ground truth)
+            
             sold_price = getattr(p, 'sold_price', None)
             price = float(sold_price) if sold_price else float(p.price)
             is_confirmed = bool(sold_price)
@@ -194,7 +173,7 @@ def load_new_properties_from_app_db() -> pd.DataFrame:
                 'Bedrooms':      float(p.bedrooms or 2),
                 'Bathrooms':     float(p.bathrooms or 2),
                 'Floor':         float(getattr(p, 'floor', 0) or 0),
-                # Single year (no history) → only current price column populated
+                
                 'Price_2026_OMR': price,
                 '_is_confirmed_sale': is_confirmed,
             })
@@ -206,7 +185,6 @@ def load_new_properties_from_app_db() -> pd.DataFrame:
     df = pd.DataFrame(records)
     logger.info(f"Loaded {len(df)} agent-added properties from live DB")
     return df
-
 
 def _infer_governorate(location: str) -> str:
     """Infer governorate from location keywords."""
@@ -221,11 +199,6 @@ def _infer_governorate(location: str) -> str:
     elif 'duqm'    in a:                 return 'Al Wusta'
     return 'Muscat'
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 🛡️ STAGE 3 — Validate + clean data
-# ─────────────────────────────────────────────────────────────────────────────
-
 def build_training_rows(df_baseline: pd.DataFrame,
                         df_new: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """
@@ -234,7 +207,6 @@ def build_training_rows(df_baseline: pd.DataFrame,
     """
     records = []
 
-    # Baseline: melt 8 price columns into rows
     for _, row in df_baseline.iterrows():
         for year, col in zip(YEARS, PRICE_COLS):
             price = float(row[col])
@@ -252,7 +224,6 @@ def build_training_rows(df_baseline: pd.DataFrame,
                 'price':       price,
             })
 
-    # New properties: single row per property at year 2026
     for _, row in df_new.iterrows():
         price = float(row.get('Price_2026_OMR', 0))
         if price <= 0:
@@ -272,7 +243,6 @@ def build_training_rows(df_baseline: pd.DataFrame,
     df = pd.DataFrame(records)
     logger.info(f"Combined training set: {len(df):,} rows")
 
-    # Outlier removal: drop bottom 1% and top 1% by price (per-area)
     df = _remove_outliers(df)
     logger.info(f"After outlier removal: {len(df):,} rows")
 
@@ -281,12 +251,11 @@ def build_training_rows(df_baseline: pd.DataFrame,
     y = df['price']
     return X, y
 
-
 def _remove_outliers(df: pd.DataFrame, percentile: float = 0.01) -> pd.DataFrame:
     """Remove top/bottom 1% by price within each (area, year) bucket."""
     def trim_group(group):
         if len(group) < 10:
-            return group   # too small to trim
+            return group   
         low  = group['price'].quantile(percentile)
         high = group['price'].quantile(1 - percentile)
         return group[(group['price'] >= low) & (group['price'] <= high)]
@@ -294,11 +263,6 @@ def _remove_outliers(df: pd.DataFrame, percentile: float = 0.01) -> pd.DataFrame
     return (df.groupby(['area', 'year'], group_keys=False)
               .apply(trim_group)
               .reset_index(drop=True))
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 🌲 STAGE 4 — Train RandomForest
-# ─────────────────────────────────────────────────────────────────────────────
 
 def train_model(X: pd.DataFrame, y: pd.Series) -> tuple:
     """Train RandomForestRegressor (same hyperparameters as baseline)."""
@@ -323,14 +287,9 @@ def train_model(X: pd.DataFrame, y: pd.Series) -> tuple:
     rf.fit(X_transformed, y)
     return preprocessor, rf, X_transformed
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# ✅ STAGE 5 — Cross-validate
-# ─────────────────────────────────────────────────────────────────────────────
-
 def validate_model(rf, X_transformed, y) -> float:
     """K-fold cross-validation. Returns mean R² score."""
-    # Use a random sample of up to 2000 rows for speed
+    
     sample_size = min(2000, len(y))
     rng = np.random.default_rng(42)
     sample_idx = rng.choice(len(y), sample_size, replace=False)
@@ -344,11 +303,6 @@ def validate_model(rf, X_transformed, y) -> float:
     mean_r2 = float(cv_scores.mean())
     logger.info(f"Cross-val R²: {cv_scores.round(3).tolist()} (mean: {mean_r2:.3f})")
     return mean_r2
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 💾 STAGE 6 — Save + version + hot-swap
-# ─────────────────────────────────────────────────────────────────────────────
 
 def save_versioned_model(preprocessor, rf, metadata: dict) -> Path:
     """Save model to models/registry/v{YYYYMMDD_HHMM}.pkl + update latest symlink."""
@@ -365,14 +319,12 @@ def save_versioned_model(preprocessor, rf, metadata: dict) -> Path:
     with open(path, 'wb') as fh:
         pickle.dump(bundle, fh)
 
-    # Update latest.pkl symlink atomically
     tmp_link = REGISTRY_DIR / "latest.pkl.tmp"
     if tmp_link.exists():
         tmp_link.unlink()
     tmp_link.symlink_to(path.name)
     tmp_link.replace(LATEST_LINK)
 
-    # Also update legacy pickle path for backward compat
     try:
         if LEGACY_PICKLE.exists() or LEGACY_PICKLE.is_symlink():
             LEGACY_PICKLE.unlink()
@@ -382,7 +334,6 @@ def save_versioned_model(preprocessor, rf, metadata: dict) -> Path:
 
     logger.info(f"Saved → {path}")
     return path
-
 
 def prune_old_versions(keep: int = MAX_VERSIONS_TO_KEEP) -> int:
     """Delete oldest versions, keeping only the last N."""
@@ -401,7 +352,6 @@ def prune_old_versions(keep: int = MAX_VERSIONS_TO_KEEP) -> int:
             logger.warning(f"Could not prune {old}: {e}")
     return pruned
 
-
 def hot_swap_into_engine(model_path: Path) -> bool:
     """Tell live ml_engine to load the new model (no restart needed)."""
     try:
@@ -410,11 +360,6 @@ def hot_swap_into_engine(model_path: Path) -> bool:
     except Exception as e:
         logger.warning(f"Hot-swap failed: {e}")
         return False
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 📋 STAGE 7 — Log to TrainingHistory + mark active
-# ─────────────────────────────────────────────────────────────────────────────
 
 def log_training(version: str, model_path: Path, r2: float,
                  rows_count: int, new_rows: int, duration: float,
@@ -426,10 +371,9 @@ def log_training(version: str, model_path: Path, r2: float,
 
     app = create_app()
     with app.app_context():
-        # Mark all previous as inactive
+        
         TrainingHistory.query.update({'is_active': False})
 
-        # Insert new row
         entry = TrainingHistory(
             version=version,
             model_path=str(model_path),
@@ -446,11 +390,6 @@ def log_training(version: str, model_path: Path, r2: float,
         db.session.commit()
         logger.info(f"TrainingHistory row #{entry.id} created ({version})")
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 🚀 MAIN PIPELINE
-# ─────────────────────────────────────────────────────────────────────────────
-
 def run(force: bool = False, dry_run: bool = False,
         min_new: int = 100, min_days: int = 7,
         trigger: str = 'manual') -> dict:
@@ -463,17 +402,14 @@ def run(force: bool = False, dry_run: bool = False,
     logger.info("  🌲 SMART RETRAIN PIPELINE STARTED")
     logger.info("═" * 60)
 
-    # ── 1. Check if worthwhile ────────────────────────────────────
     do_run, reason = should_retrain(min_new=min_new, min_days=min_days, force=force)
     logger.info(f"Decision: {'PROCEED' if do_run else 'SKIP'} — {reason}")
     if not do_run:
         return {'status': 'skipped', 'reason': reason}
 
-    # ── 2. Load data ──────────────────────────────────────────────
     df_baseline = load_baseline_data()
     df_new      = load_new_properties_from_app_db()
 
-    # ── 3. Build training set ─────────────────────────────────────
     X, y = build_training_rows(df_baseline, df_new)
     rows_count = len(y)
     new_rows   = len(df_new)
@@ -482,10 +418,8 @@ def run(force: bool = False, dry_run: bool = False,
         logger.error(f"Too few rows ({rows_count}) — aborting")
         return {'status': 'failed', 'reason': 'insufficient_data'}
 
-    # ── 4. Train ──────────────────────────────────────────────────
     preprocessor, rf, X_transformed = train_model(X, y)
 
-    # ── 5. Validate ───────────────────────────────────────────────
     r2 = validate_model(rf, X_transformed, y)
     if r2 < MIN_R2_SCORE:
         logger.error(f"R²={r2:.3f} < {MIN_R2_SCORE} threshold — REJECTING new model")
@@ -500,8 +434,6 @@ def run(force: bool = False, dry_run: bool = False,
             )
         return {'status': 'rejected', 'r2': r2, 'reason': 'low_quality'}
 
-    # ── 5b. 🛡️ DRIFT DETECTION — reject if significantly worse than active ──
-    # نَرفض النموذج الجديد لو كان R² أسوأ بـ >5% من النموذج النشط
     try:
         from app import create_app
         from models import TrainingHistory
@@ -511,7 +443,7 @@ def run(force: bool = False, dry_run: bool = False,
             current_active = TrainingHistory.query.filter_by(is_active=True).first()
             if current_active and current_active.r2_score:
                 drift = current_active.r2_score - r2
-                if drift > 0.05:   # 5 percentage points drop
+                if drift > 0.05:   
                     logger.error(
                         f"⚠️ DRIFT DETECTED: new R²={r2:.4f} vs active "
                         f"R²={current_active.r2_score:.4f} (-{drift:.4f}). "
@@ -536,7 +468,6 @@ def run(force: bool = False, dry_run: bool = False,
     except Exception as e:
         logger.warning(f"Drift check failed (continuing): {e}")
 
-    # ── 6. Save + hot-swap ───────────────────────────────────────
     version = f"v{datetime.utcnow():%Y%m%d_%H%M}"
     metadata = {
         'version':    version,
@@ -556,7 +487,6 @@ def run(force: bool = False, dry_run: bool = False,
     swapped    = hot_swap_into_engine(model_path)
     duration   = time.time() - start_time
 
-    # ── 7. Log + prune ───────────────────────────────────────────
     log_training(
         version=version, model_path=model_path,
         r2=r2, rows_count=rows_count, new_rows=new_rows,
@@ -582,11 +512,6 @@ def run(force: bool = False, dry_run: bool = False,
         'duration':   duration,
         'hot_swap':   swapped,
     }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 🎯 CLI ENTRY POINT
-# ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Smart ML retraining pipeline")
