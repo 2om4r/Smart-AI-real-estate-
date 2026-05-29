@@ -362,20 +362,30 @@
   function makeProjectPopup(p) {
     const growthPct = p.projected_5y_growth_pct || 0;
     const startPrice = (p.starting_price || 0).toLocaleString();
-    const unitsTxt = (p.units_added !== undefined && p.total_units)
-      ? `${p.units_added}/${p.total_units}`
-      : (p.units_added !== undefined ? `${p.units_added}` : '—');
+    
+    let unitsTxt = '—';
+    if (p.is_surooh || p.is_omran) {
+      unitsTxt = p.total_units ? p.total_units.toString() : '—';
+    } else {
+      unitsTxt = (p.units_added !== undefined && p.total_units)
+        ? `${p.units_added}/${p.total_units}`
+        : (p.units_added !== undefined ? `${p.units_added}` : '—');
+    }
 
-    // Status badge (matches .rec-badge style — green / orange / red)
+    // Status badge (matches .rec-badge style — green / orange / red / purple / blue)
     let badgeColor, badgeIcon, badgeText;
-    if (growthPct >= 50) {
+    if (p.is_surooh) {
+      badgeColor = 'purple'; badgeIcon = '🏛️'; badgeText = 'Official Gov Project';
+    } else if (p.is_omran) {
+      badgeColor = 'blue'; badgeIcon = '🏢'; badgeText = 'Premium Master Dev';
+    } else if (growthPct >= 50) {
       badgeColor = 'green'; badgeIcon = '🚀';  badgeText = 'Strong Growth';
     } else if (growthPct >= 25) {
       badgeColor = 'orange'; badgeIcon = '📊'; badgeText = 'Moderate Growth';
     } else if (growthPct > 0) {
       badgeColor = 'orange'; badgeIcon = '📊'; badgeText = 'Stable';
     } else {
-      badgeColor = 'red'; badgeIcon = '⚠️'; badgeText = p.status || 'Under Review';
+      badgeColor = 'green'; badgeIcon = '✅'; badgeText = p.status || 'Available';
     }
 
     return `<div class="inv-popup">
@@ -435,11 +445,14 @@
     }));
 
     // 🆕 Agent projects sidebar cards
-    const pCards = projects.map(p=>({
-      kind:'project', color:'gold', name:p.title, lat:p.lat, lng:p.lng,
-      meta:`${p.location || ''} · ${p.units_added}${p.total_units?'/'+p.total_units:''} units · OMR ${(p.starting_price||0).toLocaleString()}${p.projected_5y_growth_pct?' · +' + p.projected_5y_growth_pct + '% 5y':''}`,
-      score:null, image_url:null, detail_url:p.detail_url
-    }));
+    const pCards = projects.map(p => {
+      const uText = (p.is_surooh || p.is_omran) ? (p.total_units || '—') : `${p.units_added}${p.total_units?'/'+p.total_units:''}`;
+      return {
+        kind:'project', color:'gold', name:p.title, lat:p.lat, lng:p.lng,
+        meta:`${p.location || ''} · ${uText} units · OMR ${(p.starting_price||0).toLocaleString()}${p.projected_5y_growth_pct?' · +' + p.projected_5y_growth_pct + '% 5y':''}`,
+        score:null, image_url:null, detail_url:p.detail_url
+      };
+    });
 
     const combined=[...aCards,...sCards,...oCards,...pCards];
     el.innerHTML=combined.map((item,i)=>{

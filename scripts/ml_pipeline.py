@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT  = Path(__file__).parent.parent
 SOURCE_DB     = Path(os.environ.get("SOURCE_DB",
-                                    "/Users/omar/Desktop/omanpDatabase.db"))
+                                    str(PROJECT_ROOT / "instance" / "database" / "omanpDatabase.db")))
 REGISTRY_DIR  = PROJECT_ROOT / "models" / "registry"
 LATEST_LINK   = REGISTRY_DIR / "latest.pkl"
 LEGACY_PICKLE = PROJECT_ROOT / "ml_model_trained.pkl"   

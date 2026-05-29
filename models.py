@@ -164,22 +164,25 @@ class Area(db.Model):
     listing_count = db.Column(db.Float, nullable=False, default=0)   
 
     @property
+    def _ml_pred(self):
+        if not hasattr(self, '_ml_prediction'):
+            from area_ml import area_ml_engine
+            self._ml_prediction = area_ml_engine.predict_area(
+                self.demand, self.price_growth, self.services, self.listing_count
+            )
+        return self._ml_prediction
+
+    @property
     def score(self):
-        return (self.demand * 0.4) + (self.price_growth * 0.3) +               (self.services * 0.2) + (self.listing_count * 0.1)
+        return self._ml_pred['score']
 
     @property
     def color(self):
-        s = self.score
-        if s > 80:   return 'red'
-        if s >= 50:  return 'orange'
-        return 'green'
+        return self._ml_pred['color']
 
     @property
     def recommendation(self):
-        s = self.score
-        if s > 80:   return 'Strong Buy'
-        if s >= 50:  return 'Moderate'
-        return 'Risky'
+        return self._ml_pred['recommendation']
 
     def to_dict(self):
         return {

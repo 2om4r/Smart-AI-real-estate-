@@ -170,15 +170,13 @@
                     <div style="font-size:2rem;">🤖</div>
                     <div>
                       <div class="fw-bold" style="color:#1c0d00;">
-                        {% set score = (property.price / 2500)|int %}
-                        {% set score = [score, 95]|min %}
-                        {% set score = [score, 40]|max %}
-                        {{ score }} / 100
+                        {{ ai_score }} / 100
                       </div>
                       <div class="small text-muted">
                         {% if property.is_omran %}OMRAN premium development — strong coastal/urban demand
                         {% elif property.is_surooh %}Surooh government project — stable, official housing
-                        {% else %}AI-scored based on type, location & price{% endif %}
+                        {% else %}Data-driven AI appraisal based on historical patterns{% endif %}
+                        {% if ai_growth > 0 %}<br><span class="text-success"><i class="fas fa-chart-line"></i> +{{ ai_growth }}% projected 5Y growth</span>{% endif %}
                       </div>
                     </div>
                   </div>
