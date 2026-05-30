@@ -70,7 +70,17 @@ def create_app(config_class=Config):
                     f"({len(ml._known_areas)} areas, {len(ml.model.estimators_)} trees)"
                 )
             else:
-                _ml_logger.warning("[ML] Engine load failed — predictions will use CAGR fallback")
+                _ml_logger.warning("[ML] Engine load failed. Triggering automatic fallback training...")
+                try:
+                    from scripts.train_from_db import train_models
+                    train_models()
+                    # Try loading again after training
+                    if init_ml_engine():
+                        _ml_logger.info("[ML] Auto-training successful! Engine is now ready.")
+                    else:
+                        _ml_logger.error("[ML] Auto-training completed but engine still failed to load.")
+                except Exception as train_err:
+                    _ml_logger.error(f"[ML] Auto-training failed: {train_err}. Predictions will use CAGR fallback.")
         except Exception as _ml_err:
             _ml_logger.warning(f"[ML] Engine init skipped: {_ml_err}")
 
