@@ -25,25 +25,14 @@ _chroma = chromadb.PersistentClient(
 )
 
 def _get_collection() -> chromadb.Collection:
-    """
-    Return the ChromaDB collection, creating it if it does not exist.
-    إرجاع مجموعة ChromaDB — تُنشأ تلقائيًا إن لم تكن موجودة.
-
-    hnsw:space = cosine  →  الأقرب لـ 0 يعني الأكثر تشابهًا دلاليًا.
-    """
+    
     return _chroma.get_or_create_collection(
         name=COLLECTION_NAME,
         metadata={"hnsw:space": "cosine"},
     )
 
 def _embed(texts: List[str]) -> List[List[float]]:
-    """
-    Embed a batch of texts with OpenAI text-embedding-3-small.
-    تضمين دفعة من النصوص باستخدام نموذج OpenAI.
-
-    Returns a list of float vectors, one per input text.
-    يُرجع قائمة متجهات، واحد لكل نص مُدخَل.
-    """
+    
     response = _openai.embeddings.create(
         model=EMBED_MODEL,
         input=texts,
@@ -51,15 +40,7 @@ def _embed(texts: List[str]) -> List[List[float]]:
     return [item.embedding for item in response.data]
 
 def _property_to_text(prop) -> str:
-    """
-    Serialise a Property ORM instance to a bilingual searchable string.
-    تحويل كائن عقار إلى نص قابل للبحث (عربي + إنجليزي).
-
-    Handles 3 cases:
-      1. Regular property
-      2. Project (is_project=True) — special multi-unit indexing
-      3. Unit inside a project (parent_project_id set) — links to parent
-    """
+    
     agent_name = prop.agent.username if prop.agent else "unknown"
     is_surooh  = "نعم" if prop.is_surooh else "لا"
     is_omran   = "نعم" if prop.is_omran  else "لا"
@@ -120,12 +101,7 @@ def _property_to_text(prop) -> str:
     )
 
 def _area_to_text(area) -> str:
-    """
-    Serialise an Area ORM instance to a searchable string.
-    تحويل كائن منطقة إلى نص قابل للبحث.
-
-    الحقول: الاسم، متوسط السعر، الطلب، نمو الأسعار، التوصية، السكور.
-    """
+    
     return (
         f"منطقة: {area.name} | "
         f"متوسط السعر: {area.avg_price} OMR | "
@@ -136,27 +112,6 @@ def _area_to_text(area) -> str:
     )
 
 def build_knowledge_base() -> None:
-    """
-    Full (re)build: delete the old collection and index every Property + Area.
-    إعادة بناء كاملة: حذف المجموعة القديمة ثم فهرسة جميع العقارات والمناطق.
-
-    Must be called inside an active Flask app_context (db queries are made here).
-    يجب الاستدعاء داخل app_context نشط لأن الدالة تستعلم من قاعدة البيانات.
-
-    Steps:
-      1. Delete existing collection (guarantees freshness on every restart)
-      2. Re-create the collection
-      3. Build text + metadata for every Property and Area row
-      4. Embed + upsert in batches of BATCH_SIZE
-      5. Log progress
-
-    الخطوات:
-      1. حذف المجموعة الحالية (يضمن حداثة البيانات عند كل إعادة تشغيل)
-      2. إنشاء مجموعة جديدة
-      3. بناء النصوص والبيانات الوصفية لكل عقار ومنطقة
-      4. التضمين والإدراج على دفعات
-      5. تسجيل التقدم
-    """
     
     from models import Property, Area
 
@@ -222,23 +177,7 @@ def build_knowledge_base() -> None:
     logger.info(f"[RAG] Knowledge base ready. {indexed}/{total} documents indexed.")
 
 def search_knowledge_base(query: str, k: int = 5) -> str:
-    """
-    Semantic search: embed the query, fetch top-k results, filter by distance.
-    بحث دلالي: تضمين الاستعلام، جلب أفضل k نتيجة، تصفية حسب المسافة.
-
-    Args:
-        query: User's natural-language question (Arabic or English).
-               سؤال المستخدم بالعربية أو الإنجليزية.
-        k:     Max number of results to fetch before distance filtering (default 5).
-               الحد الأقصى للنتائج قبل التصفية.
-
-    Returns:
-        A single newline-joined string of relevant documents ready for GPT injection.
-        Returns "" on error or when no relevant results pass the distance threshold.
-
-        نص واحد يجمع الوثائق ذات الصلة — جاهز للحقن في رسالة النظام لـ GPT.
-        يُرجع "" عند الخطأ أو عدم وجود نتائج ذات صلة كافية.
-    """
+    
     if not query or not query.strip():
         return ""
 
@@ -273,18 +212,7 @@ def search_knowledge_base(query: str, k: int = 5) -> str:
         return ""  
 
 def update_property_in_rag(property_id: int) -> None:
-    """
-    Upsert (insert or overwrite) a single property document in ChromaDB.
-    إدراج أو تحديث وثيقة عقار واحد في ChromaDB.
-
-    Call this after:
-      - A new property is added   (add_property route)
-      - An existing property is edited (edit_property route)
-
-    استدعِها بعد:
-      - إضافة عقار جديد
-      - تعديل عقار موجود
-    """
+    
     from models import Property  
 
     doc_id = f"prop_{property_id}"
@@ -310,17 +238,7 @@ def update_property_in_rag(property_id: int) -> None:
         logger.error(f"[RAG] update_property_in_rag({property_id}) failed: {e}")
 
 def delete_property_from_rag(property_id: int) -> None:
-    """
-    Remove a single property document from ChromaDB by its doc_id.
-    إزالة وثيقة عقار واحد من ChromaDB باستخدام معرّفه.
-
-    Call this after a property is deleted from the DB.
-    استدعِها بعد حذف العقار من قاعدة البيانات.
-
-    Errors are caught and logged — the DB delete should not be blocked
-    by a RAG failure.
-    الأخطاء تُسجَّل فقط ولا تمنع حذف العقار من قاعدة البيانات.
-    """
+    
     doc_id = f"prop_{property_id}"
 
     try:

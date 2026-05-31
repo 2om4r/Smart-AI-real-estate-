@@ -78,7 +78,7 @@ class Property(db.Model):
 
     @property
     def is_new(self):
-        """Property is 'new' if created within last 30 days."""
+        
         return (datetime.utcnow() - self.created_at) < timedelta(days=30)
 
     images = db.relationship('PropertyImage', backref='property', lazy=True, cascade="all, delete-orphan")
@@ -291,14 +291,7 @@ class InvestmentRequest(db.Model):
                 f"status='{self.status}')")
 
 class TrainingHistory(db.Model):
-    """
-    Audit log for every ML retraining run.
-
-    Used by:
-      • scripts/retrain.py — writes a row after each successful train
-      • /api/ml/history    — admin sees all past runs
-      • /api/ml/rollback   — can pick previous version by id
-    """
+    
     __tablename__ = 'training_history'
 
     id            = db.Column(db.Integer, primary_key=True)
@@ -337,13 +330,7 @@ class TrainingHistory(db.Model):
         }
 
 class PredictionLog(db.Model):
-    """
-    Audit log of every ML prediction.
-
-    When a property sells, the actual_price is filled in. This gives us
-    ground truth to measure ML accuracy over time and feed back into
-    training (weighted by confirmation).
-    """
+    
     __tablename__ = 'prediction_log'
 
     id              = db.Column(db.Integer, primary_key=True)

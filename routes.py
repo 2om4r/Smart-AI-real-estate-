@@ -23,11 +23,7 @@ from firebase import db as firebase_db
 main = Blueprint('main', __name__)
 
 def _rag_update(property_id: int) -> None:
-    """
-    Upsert a single property in ChromaDB after add or edit.
-    تحديث عقار واحد في ChromaDB بعد الإضافة أو التعديل.
-    Silently skipped if chromadb / OpenAI is unavailable.
-    """
+    
     try:
         from rag_engine import update_property_in_rag
         update_property_in_rag(property_id)
@@ -36,12 +32,7 @@ def _rag_update(property_id: int) -> None:
         logging.getLogger(__name__).warning(f"[RAG] update skipped for property {property_id}: {e}")
 
 def _rag_delete(property_id: int) -> None:
-    """
-    Remove a single property document from ChromaDB after deletion.
-    حذف وثيقة عقار من ChromaDB بعد حذفه من قاعدة البيانات.
-    Must be called BEFORE db.session.delete(prop) so the ID is still valid.
-    يجب الاستدعاء قبل حذف العقار من قاعدة البيانات.
-    """
+    
     try:
         from rag_engine import delete_property_from_rag
         delete_property_from_rag(property_id)
@@ -52,11 +43,7 @@ def _rag_delete(property_id: int) -> None:
 @main.route("/api/chat", methods=["POST"])
 @limiter.limit("10 per minute")   
 def chat_api():
-    """
-    واجهة المحادثة مع Ahmed 2.0
-    تقبل: message, conversation_id (اختياري)
-    تُرجع: text, properties, investment_hotspots, conversation_id
-    """
+    
     data            = request.get_json()
     message         = data.get("message", "")
     conversation_id = data.get("conversation_id")   
@@ -82,10 +69,7 @@ def chat_api():
 
 @main.route("/api/chat/feedback", methods=["POST"])
 def chat_feedback():
-    """
-    حفظ تقييم المستخدم على رسالة معينة (إيجابي/سلبي + تعليق)
-    Body: { chat_log_id, rating (1=👍 / 0=👎), comment (optional) }
-    """
+    
     data        = request.get_json()
     chat_log_id = data.get("chat_log_id")
     rating      = data.get("rating")
@@ -116,11 +100,7 @@ def chat_feedback():
 @main.route("/api/admin/chat-analytics")
 @login_required
 def chat_analytics():
-    """
-    تحليلات المحادثات للمشرف:
-    - إجمالي المحادثات، متوسط وقت الاستجابة، متوسط التوكنز
-    - توزيع النوايا، أكثر المواقع بحثًا، معدل الرضا، التكلفة اليومية
-    """
+    
     if current_user.role != 'admin':
         return jsonify({"error": "Admin access required"}), 403
 
@@ -206,19 +186,7 @@ def api_omran_properties():
 
 @main.route("/healthz")
 def healthz():
-    """
-    System health endpoint.
-    Returns 200 if all subsystems healthy, 503 if any critical service degraded.
-    Used by uptime monitors and load balancers.
-
-    Response schema:
-    {
-      "status":    "healthy" | "degraded" | "unhealthy",
-      "checks":    { db, ml, rag, scheduler },
-      "uptime_s":  seconds since app started,
-      "timestamp": ISO timestamp
-    }
-    """
+    
     checks = {}
     degraded = False
     unhealthy = False
@@ -288,7 +256,7 @@ def healthz():
 @main.route("/admin/ml-monitor")
 @login_required
 def admin_ml_monitor():
-    """صفحة لوحة مراقبة ML — للأدمن فقط."""
+    
     if current_user.role != 'admin':
         flash('Admin access required.', 'danger')
         return redirect(url_for('main.dashboard'))
@@ -297,10 +265,7 @@ def admin_ml_monitor():
 @main.route("/api/ml/history")
 @login_required
 def api_ml_history():
-    """
-    قائمة بكل عمليَّات التَدريب السابقة — للأدمن فقط.
-    Admin-only: list of all past training runs.
-    """
+    
     if current_user.role != 'admin':
         return jsonify({'error': 'admin only'}), 403
 
@@ -315,11 +280,7 @@ def api_ml_history():
 @login_required
 @limiter.limit("3 per hour")
 def api_ml_retrain():
-    """
-    تَشغيل إعادة تَدريب يدويَّة — للأدمن فقط.
-    Body (optional): {force: true, dry_run: false, min_new: 100, min_days: 7}
-    Admin-only: trigger a manual retraining run.
-    """
+    
     if current_user.role != 'admin':
         return jsonify({'error': 'admin only'}), 403
 
@@ -342,11 +303,7 @@ def api_ml_retrain():
 @login_required
 @limiter.limit("10 per hour")
 def api_ml_rollback():
-    """
-    التَراجُع لإصدار سابق من النموذج — للأدمن فقط.
-    Body: {version: "v20260520_2257"}  OR  {history_id: 3}
-    Admin-only: hot-swap to a previous model version.
-    """
+    
     if current_user.role != 'admin':
         return jsonify({'error': 'admin only'}), 403
 
@@ -388,10 +345,7 @@ def api_ml_rollback():
 
 @main.route("/api/ml/status")
 def api_ml_status():
-    """
-    إرجاع حالة محرِّك ML — مفيد للأدمن والـ monitoring.
-    Returns: {loaded, version, trees, known_areas, cache_size, hit_rate, ...}
-    """
+    
     try:
         from ml_engine import ml
         return jsonify(ml.status())
@@ -401,10 +355,7 @@ def api_ml_status():
 @main.route("/api/ml/predict", methods=['POST'])
 @limiter.limit("30 per minute")
 def api_ml_predict():
-    """
-    نقطة نهاية موحَّدة للتَنَبُّؤ بالسعر والنمو من ML.
-    Body: {type, area, sqm, bedrooms, bathrooms, floor, years (optional)}
-    """
+    
     try:
         from ml_engine import ml
         data = request.get_json() or {}
@@ -418,10 +369,7 @@ def api_ml_predict():
 
 @main.route("/api/projects")
 def api_projects():
-    """
-    جميع المشاريع المُنشأة من قِبَل الوكلاء (is_project=True).
-    تُعرض على الخريطة الحراريَّة + متوفِّرة للشاتبوت.
-    """
+    
     projects = Property.query.filter_by(is_project=True).all()
 
     out = []
@@ -1001,10 +949,7 @@ def new_property():
 @main.route("/project/new", methods=['GET', 'POST'])
 @login_required
 def new_project():
-    """
-    إنشاء مشروع جديد (parent property مع is_project=True).
-    بعد الإنشاء، الوكيل يُعاد توجيهه إلى صفحة المشروع لإضافة الوحدات.
-    """
+    
     if current_user.role != 'agent':
         flash('Only agents can create projects.', 'danger')
         return redirect(url_for('main.dashboard'))
@@ -1057,7 +1002,7 @@ def new_project():
 
 @main.route("/project/<int:project_id>")
 def project_detail(project_id):
-    """صفحة عرض المشروع مع كل وحداته."""
+    
     project = Property.query.get_or_404(project_id)
     if not project.is_project:
         
@@ -1088,7 +1033,7 @@ def project_detail(project_id):
 @main.route("/project/<int:project_id>/add_unit", methods=['GET', 'POST'])
 @login_required
 def add_unit(project_id):
-    """إضافة وحدة جديدة (أو عدَّة وحدات متماثلة) داخل مشروع موجود."""
+    
     project = Property.query.get_or_404(project_id)
     if not project.is_project:
         flash('This is not a project.', 'warning')
@@ -1159,7 +1104,7 @@ def add_unit(project_id):
 @main.route("/project/<int:project_id>/delete", methods=['POST'])
 @login_required
 def delete_project(project_id):
-    """حذف مشروع + جميع وحداته."""
+    
     project = Property.query.get_or_404(project_id)
     if not project.is_project:
         flash('Not a project.', 'warning')
@@ -1245,12 +1190,7 @@ def edit_property(property_id):
 @main.route("/property/<int:property_id>/mark_sold", methods=['POST'])
 @login_required
 def mark_property_sold(property_id):
-    """
-    Mark a property as sold with the actual sale price.
-    This becomes ground truth for the next ML training cycle.
-
-    Body: {actual_price: float}
-    """
+    
     prop = Property.query.get_or_404(property_id)
     if prop.agent_id != current_user.id and current_user.role != 'admin':
         return jsonify({'error': 'not authorized'}), 403
@@ -1293,10 +1233,7 @@ def mark_property_sold(property_id):
 
 @main.route("/api/ml/accuracy")
 def api_ml_accuracy():
-    """
-    Aggregate ML accuracy across all confirmed sales.
-    يَحسب مدى دقَّة النموذج الفعليَّة من العقارات التي بِيعت فعلاً.
-    """
+    
     from models import PredictionLog
     confirmed = PredictionLog.query.filter(
         PredictionLog.actual_price.isnot(None)
@@ -1329,7 +1266,6 @@ def property_detail(property_id):
         db.session.add(rv)
         db.session.commit()
         
-    # Generate Real AI Score
     try:
         from ml_engine import ml
         features = {
@@ -1343,6 +1279,15 @@ def property_detail(property_id):
             'year': 2026
         }
         growth_data = ml.predict_growth(features, years=5)
+        roi_val = ml.predict_roi({
+            'type': prop.type,
+            'location': prop.location or prop.city or 'Muscat',
+            'status': prop.status or 'available',
+            'price_omr': float(prop.price or 0)
+        })
+        if roi_val <= 0:
+            from ai_utils import get_roi_assumption
+            roi_val = get_roi_assumption(prop.type)
         
         base_score = growth_data.get('confidence', 70) * 0.7 + min(growth_data.get('growth_pct', 10), 30)
         
@@ -1360,8 +1305,9 @@ def property_detail(property_id):
         ai_score = 65
         ai_growth = 5.5
         ai_future = prop.price * 1.25
+        roi_val = 6.0
 
-    return render_template('property_detail.html', property=prop, ai_score=ai_score, ai_growth=ai_growth, ai_future=ai_future)
+    return render_template('property_detail.html', property=prop, ai_score=ai_score, ai_growth=ai_growth, ai_future=ai_future, roi_val=roi_val)
 
 @main.route("/search")
 def search():
@@ -1524,17 +1470,7 @@ def api_messages(user_id):
 @main.route("/api/predict_price", methods=["POST"])
 @limiter.limit("30 per minute; 500 per hour")
 def predict_price_api():
-    """
-    AI Price Estimation endpoint — now powered by ml_engine v2.
-
-    🆕 Enhancements over v1:
-      • Per-property growth (uses sqm, bedrooms, type — not just area average)
-      • ML confidence interval from RF tree variance (200 trees)
-      • Year-by-year projection using RF-derived per-property CAGR
-      • Property-level price range [low, high] = ±1 σ
-
-    Input: {location, type, price, sqm?, bedrooms?, bathrooms?, floor?}
-    """
+    
     from ml_engine import ml
 
     data  = request.get_json() or {}
@@ -1784,13 +1720,7 @@ def agent_message_thread(customer_id):
 @main.route("/api/investment_requests")
 @login_required
 def api_investment_requests():
-    """
-    Return all InvestmentRequests for the current agent (newest first).
-    إرجاع جميع طلبات الاستثمار للوكيل الحالي (الأحدث أولاً).
-
-    Agents only — returns 403 for other roles.
-    للوكلاء فقط — يُرجع 403 للأدوار الأخرى.
-    """
+    
     if current_user.role not in ('agent', 'admin'):
         return jsonify({"error": "Agent access required"}), 403
 
@@ -1816,13 +1746,7 @@ def api_investment_requests():
 @main.route("/api/investment_requests/<int:req_id>/status", methods=["POST"])
 @login_required
 def update_investment_request_status(req_id):
-    """
-    Update the status of an InvestmentRequest (pending → contacted → closed).
-    تحديث حالة طلب الاستثمار (قيد الانتظار → تم التواصل → مُغلَق).
-
-    Body: { "status": "contacted" | "closed" | "pending" }
-    يقبل: { "status": "contacted" | "closed" | "pending" }
-    """
+    
     if current_user.role not in ('agent', 'admin'):
         return jsonify({"error": "Agent access required"}), 403
 

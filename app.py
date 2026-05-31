@@ -26,7 +26,7 @@ def create_app(config_class=Config):
 
     @app.template_filter('property_image_url')
     def property_image_url(filename):
-        """Return external URLs unchanged; convert local filenames to static URL."""
+        
         if not filename:
             return ''
         if filename.startswith('http://') or filename.startswith('https://'):
@@ -74,7 +74,7 @@ def create_app(config_class=Config):
                 try:
                     from scripts.train_from_db import train_models
                     train_models()
-                    # Try loading again after training
+                    
                     if init_ml_engine():
                         _ml_logger.info("[ML] Auto-training successful! Engine is now ready.")
                     else:

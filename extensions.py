@@ -23,14 +23,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 scheduler = BackgroundScheduler(daemon=True)
 
 def init_scheduler(app):
-    """
-    Initialize the background scheduler with two jobs:
-
-      1. Weekly retrain — every Sunday at 2 AM (light load)
-      2. Threshold check — every hour, retrain if >100 new properties
-
-    Both run inside Flask app_context so DB queries work.
-    """
+    
     import logging
     log = logging.getLogger('scheduler')
 
@@ -39,7 +32,7 @@ def init_scheduler(app):
         return
 
     def _run_retrain(trigger_source: str):
-        """Wrapper that runs retrain inside app context."""
+        
         with app.app_context():
             try:
                 from scripts.ml_pipeline import run

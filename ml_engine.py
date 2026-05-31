@@ -1,18 +1,3 @@
-"""
-ml_engine.py — Smart Estate Oman, ML Inference Layer v2
-========================================================
-طبقة الاستدلال الذكيَّة الجديدة — RF-driven بدلاً من CAGR ثابت
-
-التَحسينات على ml_model.py القديم:
-  ✅ Singleton pattern — instance واحد فقط (memory-safe)
-  ✅ Hot-swap atomically — استبدال النموذج بدون إعادة تشغيل
-  ✅ TTL cache — تَجَنُّب إعادة حساب نفس الـ prediction
-  ✅ Thread-safe — يَستخدم RLock للقراءة/الكتابة المتزامنة
-  ✅ Confidence intervals — من تَباين الـ 200 شجرة
-  ✅ Per-property growth — استخدام RF مباشرة بدلاً من معادلة CAGR
-  ✅ Cold-start fallback — يَتعامل مع المناطق الجديدة بذكاء
-  ✅ Metadata tracking — version, R², trained_at لكل نموذج
-"""
 
 from __future__ import annotations
 
@@ -32,10 +17,7 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 class TTLCache:
-    """
-    Thread-safe in-memory cache with per-entry TTL.
-    تَخزين مؤقَّت آمن للـ threads مع انتهاء صلاحيَّة لكل مدخل.
-    """
+    
     def __init__(self, maxsize: int = 10_000, ttl_seconds: int = 3600):
         self.maxsize     = maxsize
         self.ttl_seconds = ttl_seconds
@@ -78,24 +60,7 @@ class TTLCache:
         return len(self._store)
 
 class MLEngine:
-    """
-    Production-grade RandomForest inference engine.
-
-    Usage:
-        from ml_engine import ml
-
-        # Price prediction with confidence
-        result = ml.predict_price({
-            'type': 'Villa', 'governorate': 'Muscat', 'area': 'Al Mouj',
-            'sqm': 350, 'bedrooms': 4, 'bathrooms': 3, 'floor': 0, 'year': 2026
-        })
-        # → {'price': 245000, 'confidence': 92, 'range': [228k, 262k]}
-
-        # Property-specific growth from RF (NOT CAGR formula)
-        growth = ml.predict_growth({...same features...}, years=5)
-        # → {'current': 245k, 'future': 388k, 'growth_pct': 58.4, 'confidence': 87}
-    """
-
+    
     DEFAULT_MODEL_PATH = os.path.join(
         os.path.dirname(__file__), "ml_model_trained.pkl"
     )
@@ -109,6 +74,7 @@ class MLEngine:
 
     def __init__(self):
         self.model        = None
+        self.roi_model    = None
         self.preprocessor = None
         self.metadata: dict = {
             'version':     'baseline',
@@ -123,10 +89,7 @@ class MLEngine:
         self._loaded = False
 
     def load(self, path: Optional[str] = None) -> bool:
-        """
-        Load model from pickle into the engine.
-        Returns True on success, False otherwise (engine stays empty).
-        """
+        
         path = path or self.DEFAULT_MODEL_PATH
         if not os.path.exists(path):
             logger.warning(f"[MLEngine] Model file not found: {path}")
@@ -154,6 +117,15 @@ class MLEngine:
                 f"[MLEngine] Loaded {self.metadata.get('version')} "
                 f"({len(self.model.estimators_)} trees) from {path}"
             )
+            
+            roi_path = os.path.join(os.path.dirname(__file__), "roi_predictor.pkl")
+            if os.path.exists(roi_path):
+                with open(roi_path, 'rb') as f:
+                    self.roi_model = pickle.load(f)
+                logger.info(f"[MLEngine] Loaded ROI model from {roi_path}")
+            else:
+                logger.warning(f"[MLEngine] ROI model not found at {roi_path}")
+
             return True
         except Exception as e:
             logger.error(f"[MLEngine] Load failed: {e}")
@@ -161,14 +133,11 @@ class MLEngine:
             return False
 
     def hot_swap(self, new_path: str) -> bool:
-        """
-        Atomically replace the live model with a new one.
-        After successful load, all subsequent predictions use the new model.
-        """
+        
         return self.load(new_path)
 
     def status(self) -> dict:
-        """Return current engine status (for /api/ml/status)."""
+        
         with self._lock:
             stats = MLEngine._stats
             total_preds = stats['predictions_total']
@@ -196,17 +165,7 @@ class MLEngine:
               'total_latency_ms': 0.0}
 
     def predict_price(self, features: dict) -> dict:
-        """
-        Predict price for a single property with confidence interval.
-
-        Returns:
-            {
-                'price':      float,         # mean prediction across 200 trees
-                'confidence': float (0-100), # 100 = high agreement among trees
-                'range':      [low, high],   # ±1 standard deviation
-                'std':        float,         # raw std for advanced uses
-            }
-        """
+        
         _t_start = time.time()
         MLEngine._stats['predictions_total'] += 1
 
@@ -272,37 +231,32 @@ class MLEngine:
     TRAINING_YEAR_MIN = 2019
     TRAINING_YEAR_MAX = 2026
 
+    def predict_roi(self, features: dict) -> float:
+        
+        if not self.roi_model:
+            return 0.0
+
+        try:
+            import pandas as pd
+            
+            df_input = pd.DataFrame([{
+                'property_type': str(features.get('type', 'Apartment')).capitalize(),
+                'location': str(features.get('location', 'Muscat')),
+                'status': str(features.get('status', 'Ready')).capitalize(),
+                'price_omr': float(features.get('price_omr', 100000)),
+                'area_sqm': float(features.get('area_sqm', 150)),
+                'age_years': float(features.get('age_years', 5)),
+                'services_score': float(features.get('services_score', 50))
+            }])
+            
+            roi_pred = self.roi_model.predict(df_input)[0]
+            return round(float(roi_pred), 1)
+        except Exception as e:
+            logger.error(f"[MLEngine] ROI Prediction failed: {e}")
+            return 0.0
+
     def predict_growth(self, features: dict, years: int = 5) -> dict:
-        """
-        Predict growth using RF-derived PER-PROPERTY CAGR.
-
-        Why this approach:
-          • RF was trained on 2019-2026 — it can't extrapolate past 2026
-          • But RF CAN tell us the historical growth FOR THIS SPECIFIC PROPERTY
-          • So we extract per-property CAGR from RF, then compound forward
-
-        Strategy:
-          1. Get RF-predicted price at 2019 (start of training)
-          2. Get RF-predicted price at 2026 (end of training)
-          3. Compute CAGR from those two RF predictions
-          4. Extrapolate forward using compound interest
-
-        This gives PER-PROPERTY growth (not area average) because RF
-        accounts for sqm, bedrooms, type interactions. A 500m² villa
-        gets different growth than an 80m² apartment in the SAME area.
-
-        Returns:
-            {
-                'current':      current price (from RF),
-                'future':       projected price (RF + compound),
-                'growth_pct':   total growth over N years,
-                'annual_pct':   compounded annual rate (from this property),
-                'multiplier':   future / current,
-                'confidence':   ML confidence,
-                'method':       'ml_per_property_cagr',
-                'years':        N,
-            }
-        """
+        
         if not self._loaded:
             return self._cagr_fallback(features, years)
 
@@ -373,26 +327,7 @@ class MLEngine:
             return self._cagr_fallback(features, years)
 
     def detect_anomaly(self, features: dict, listed_price: float) -> dict:
-        """
-        Compare listed price to RF prediction. Flag suspicious listings.
-
-        Severity bands (by absolute deviation):
-          • > 70% deviation → 'high'    (likely error or fraud)
-          • > 40% deviation → 'medium'  (worth reviewing)
-          • > 20% deviation → 'low'     (informational)
-          • else           → not flagged
-
-        Returns:
-            {
-                'is_anomaly':     bool,
-                'severity':       'low' | 'medium' | 'high' | None,
-                'reason':         human-readable explanation,
-                'deviation_pct':  signed % difference (-100 to +inf),
-                'predicted':      RF estimate,
-                'listed':         user-provided price,
-                'confidence':     ML confidence (lower = less trust the flag),
-            }
-        """
+        
         if not self._loaded or listed_price <= 0:
             return {'is_anomaly': False, 'severity': None, 'reason': '',
                     'deviation_pct': 0, 'predicted': 0,
@@ -447,12 +382,7 @@ class MLEngine:
         }
 
     def predict_area_growth(self, location: str, years: int = 5) -> dict:
-        """
-        Predict average growth for an area (when no specific property given).
-
-        Uses RF with archetype features (median property in that area),
-        not the linear CAGR formula.
-        """
+        
         archetype = {
             'type':        'Apartment',
             'governorate': self._guess_governorate(location),
@@ -466,13 +396,7 @@ class MLEngine:
         return self.predict_growth(archetype, years)
 
     def _normalize_features(self, features: dict) -> dict:
-        """
-        Fill missing keys with sensible defaults, normalize types.
-
-        🆕 Cold-start handling: if the area is unknown to the model,
-        we use the governorate-level archetype as a proxy. The caller
-        can detect this via .is_cold_start_area() to lower confidence.
-        """
+        
         area_in = str(features.get('area') or features.get('location') or 'Muscat')
         gov_in  = features.get('governorate') or self._guess_governorate(area_in)
 
@@ -499,29 +423,29 @@ class MLEngine:
         return out
 
     def is_cold_start_area(self, area: str) -> bool:
-        """Return True if RF has never seen this area."""
+        
         if not self._known_areas:
             return False
         return area not in self._known_areas
 
     def confidence_band(self, confidence: float) -> str:
-        """Map confidence % to UI band: high / medium / low."""
+        
         if confidence >= 80:  return 'high'
         if confidence >= 50:  return 'medium'
         return 'low'
 
     def _build_feature_row(self, feats: dict) -> pd.DataFrame:
-        """Construct a single-row DataFrame in correct column order."""
+        
         return pd.DataFrame([{name: feats[name] for name in self.FEATURE_NAMES}])
 
     def _hash_features(self, feats: dict) -> str:
-        """Stable hash of features dict for caching."""
+        
         return hashlib.md5(
             json.dumps(feats, sort_keys=True, default=str).encode()
         ).hexdigest()
 
     def _extract_known_categories(self) -> None:
-        """Pull known type/area values from the trained OHE preprocessor."""
+        
         try:
             for name, trans, cols in self.preprocessor.transformers_:
                 if name == 'cat':
@@ -533,7 +457,7 @@ class MLEngine:
             logger.warning(f"[MLEngine] Could not extract categories: {e}")
 
     def _guess_governorate(self, area_name: str) -> str:
-        """Infer governorate from area name keywords."""
+        
         a = (area_name or '').lower()
         if   'muscat'  in a or 'مسقط'  in a: return 'Muscat'
         elif 'salalah' in a or 'صلالة' in a: return 'Dhofar'
@@ -546,7 +470,7 @@ class MLEngine:
         return 'Muscat'   
 
     def _derive_version(self, path: str) -> str:
-        """Derive version string from file metadata."""
+        
         try:
             mtime = os.path.getmtime(path)
             return f"v{datetime.fromtimestamp(mtime):%Y%m%d_%H%M}"
@@ -554,10 +478,7 @@ class MLEngine:
             return 'unknown'
 
     def _cagr_fallback(self, features: dict, years: int) -> dict:
-        """
-        Fallback to Area.price_growth-based CAGR if RF unavailable.
-        يَستخدم نفس الصيغة القديمة فقط عند فشل ML — للحفاظ على الـ uptime.
-        """
+        
         try:
             from models import Area
             location = features.get('area') or features.get('location', '')
@@ -584,10 +505,7 @@ class MLEngine:
 ml = MLEngine()
 
 def init_ml_engine(model_path: Optional[str] = None) -> bool:
-    """
-    Convenience function — called from app.py at startup.
-    Loads the model from disk into the singleton.
-    """
+    
     return ml.load(model_path)
 
 def get_ml_investment_score(predicted_price, actual_price):
@@ -600,7 +518,7 @@ def get_ml_investment_score(predicted_price, actual_price):
     return min(max(round(score), 0), 100)
 
 def ensure_trained() -> bool:
-    '''Auto-train stub migrated from v1. v2 Engine is auto-loaded at startup.'''
+    
     return ml._loaded
 
 def get_future_multiplier(location: str, years: int,

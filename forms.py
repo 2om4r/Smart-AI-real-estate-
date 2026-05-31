@@ -48,10 +48,7 @@ class PropertyForm(FlaskForm):
     submit = SubmitField('Post Property')
 
 class ProjectForm(FlaskForm):
-    """
-    نموذج إنشاء مشروع جديد (Project)
-    المشروع = حاوية لعدَّة وحدات (شقق، فلل، تاون هاوس...) في موقع واحد.
-    """
+    
     name = StringField('Project Name', validators=[DataRequired(), Length(max=100)])
     description = TextAreaField('Project Description', validators=[DataRequired()])
     developer = StringField('Developer', validators=[Optional(), Length(max=100)])
@@ -73,10 +70,7 @@ class ProjectForm(FlaskForm):
     submit = SubmitField('Create Project')
 
 class UnitForm(FlaskForm):
-    """
-    نموذج إضافة وحدة (Unit) داخل مشروع موجود.
-    عند الإضافة: location و city و agent تَرِث من المشروع تلقائياً.
-    """
+    
     title = StringField('Unit Title (e.g. "Type A - 2BR")', validators=[DataRequired()])
     description = TextAreaField('Unit Description', validators=[DataRequired()])
     type = SelectField('Unit Type', choices=[
