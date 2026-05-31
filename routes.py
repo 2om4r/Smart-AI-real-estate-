@@ -286,7 +286,7 @@ def api_ml_retrain():
 
     data = request.get_json() or {}
     try:
-        from scripts.retrain import run
+        from scripts.ml_pipeline import run
         result = run(
             force    = bool(data.get('force', True)),    
             dry_run  = bool(data.get('dry_run', False)),
