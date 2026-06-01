@@ -675,8 +675,8 @@ def dashboard():
                                threads=agent_threads_list)
 
     elif current_user.role == 'admin':
-        users      = User.query.all()
-        properties = Property.query.all()
+        users      = User.query.order_by(User.id.desc()).limit(50).all()
+        properties = Property.query.order_by(Property.created_at.desc()).limit(50).all()
 
         if properties:
             for p in properties:
@@ -685,18 +685,7 @@ def dashboard():
                     'type': p.type, 'price': safe_price, 'location': p.location
                 })
                 
-                feats = {
-                    'type': p.type or 'Unknown',
-                    'governorate': p.city or 'Muscat',
-                    'area': p.location or 'Unknown',
-                    'sqm': p.size or 0,
-                    'bedrooms': getattr(p, 'bedrooms', 2) or 2,
-                    'bathrooms': getattr(p, 'bathrooms', 2) or 2,
-                    'floor': 0,
-                    'year': 2026
-                }
-                pred_res = ml.predict_price(feats)
-                p.predicted_price = pred_res.get('price', 0)
+                p.predicted_price = p.ml_predicted_at_listing or safe_price
                 p.ml_score        = get_ml_investment_score(p.predicted_price, safe_price)
 
         return render_template('dashboard_admin.html',
@@ -748,7 +737,7 @@ def dashboard():
             pref_locs.add(rv.property.location)
             pref_types.add(rv.property.type)
 
-        all_props = Property.query.all()
+        all_props = Property.query.order_by(Property.created_at.desc()).limit(100).all()
         prices    = [float(p.price) for p in all_props if p.price]
         avg       = sum(prices) / len(prices) if prices else 100000
         for p in all_props:
@@ -865,6 +854,25 @@ def new_property():
             is_omran=is_omran,
             agent_id=current_user.id
         )
+
+        # Cache ML Prediction
+        feats = {
+            'type': prop.type or 'Unknown',
+            'governorate': prop.city or 'Muscat',
+            'area': prop.location or 'Unknown',
+            'sqm': prop.size or 0,
+            'bedrooms': prop.bedrooms or 2,
+            'bathrooms': prop.bathrooms or 2,
+            'floor': 0,
+            'year': 2026
+        }
+        try:
+            pred_res = ml.predict_price(feats)
+            prop.ml_predicted_at_listing = pred_res.get('price', prop.price)
+        except Exception as e:
+            current_app.logger.error(f"ML Prediction failed during property creation: {e}")
+            prop.ml_predicted_at_listing = prop.price
+
         db.session.add(prop)
         db.session.flush()
 
@@ -1614,7 +1622,7 @@ def predict_price_api():
 
 @main.route("/api/recommendations")
 def api_recommendations():
-    all_props = Property.query.all()
+    all_props = Property.query.order_by(Property.created_at.desc()).limit(100).all()
     prices    = [float(p.price) for p in all_props if p.price]
     avg       = sum(prices) / len(prices) if prices else 100000
 

@@ -55,6 +55,32 @@ def get_roi_assumption(prop_type: str) -> float:
     }
     return mapping.get((prop_type or '').lower(), 5.0)
 
+_area_cache = None
+
+def get_area_stats(location_str: str):
+    global _area_cache
+    if _area_cache is None:
+        try:
+            from models import Area
+            all_areas = Area.query.all()
+            _area_cache = {a.name.lower(): a for a in all_areas}
+        except Exception:
+            _area_cache = {}
+            
+    if not location_str:
+        return None
+        
+    loc_lower = location_str.lower()
+    # Direct match first
+    if loc_lower in _area_cache:
+        return _area_cache[loc_lower]
+        
+    # Partial match (like ILIKE)
+    for name, area in _area_cache.items():
+        if name in loc_lower or loc_lower in name:
+            return area
+    return None
+
 def calculate_score(p: dict, avg_price: float = 100000) -> int:
     
     price    = float(p.get('price', avg_price))
@@ -67,7 +93,7 @@ def calculate_score(p: dict, avg_price: float = 100000) -> int:
     growth         = 50
 
     if location:
-        area = Area.query.filter(Area.name.ilike(f"%{location}%")).first()
+        area = get_area_stats(location)
     if area:
         location_score = area.score
         demand         = area.demand
