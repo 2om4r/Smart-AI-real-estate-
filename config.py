@@ -5,7 +5,10 @@ class Config:
     if not SECRET_KEY:
         raise ValueError("No SECRET_KEY set for Flask application")
     basedir = os.path.abspath(os.path.dirname(__file__))
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or        'sqlite:///' + os.path.join(basedir, 'instance', 'database', 'real_estate.db')
+    db_dir = os.path.join(basedir, 'instance', 'database')
+    os.makedirs(db_dir, exist_ok=True)
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
+        'sqlite:///' + os.path.join(db_dir, 'real_estate.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     UPLOAD_FOLDER = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'static/uploads')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  
