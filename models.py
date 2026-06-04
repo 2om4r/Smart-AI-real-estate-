@@ -20,6 +20,11 @@ class User(db.Model, UserMixin):
     theme_mode = db.Column(db.String(10), default='light')
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
+    failed_logins = db.Column(db.Integer, default=0)
+    lockout_until = db.Column(db.DateTime, nullable=True)
+    mfa_enabled = db.Column(db.Boolean, default=False)
+    mfa_secret = db.Column(db.String(32), nullable=True)
+
     properties = db.relationship('Property', backref='agent', lazy=True)
     favorites = db.relationship('Favorite', backref='user', lazy=True)
     inquiries = db.relationship('Inquiry', backref='user', lazy=True)
@@ -367,3 +372,4 @@ class PredictionLog(db.Model):
             'predicted_at':    self.predicted_at.isoformat() if self.predicted_at else None,
             'confirmed_at':    self.confirmed_at.isoformat() if self.confirmed_at else None,
         }
+

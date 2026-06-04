@@ -19,6 +19,12 @@ import uuid
 from ml_engine import ml
 from ml_engine import get_future_multiplier, get_ml_investment_score
 from firebase import db as firebase_db
+import pyotp
+import qrcode
+import base64
+import io
+
+from firebase import db as firebase_db
 
 main = Blueprint('main', __name__)
 
@@ -497,13 +503,107 @@ def login():
 
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
+        
+        if user:
+            if user.lockout_until and user.lockout_until > datetime.utcnow():
+                remaining = (user.lockout_until - datetime.utcnow()).total_seconds() // 60
+                flash(f'Account locked due to too many failed attempts. Try again in {int(remaining)} minutes.', 'danger')
+                return render_template('login.html', title='Login', form=form)
+
         if user and user.check_password(form.password.data):
+            user.failed_logins = 0
+            user.lockout_until = None
+            db.session.commit()
+
+            if getattr(user, 'mfa_enabled', False):
+                session['mfa_user_id'] = user.id
+                return redirect(url_for('main.verify_mfa'))
+
             login_user(user)
             return redirect(url_for('main.home'))
         else:
-            flash('Login failed', 'danger')
+            if user:
+                user.failed_logins = getattr(user, 'failed_logins', 0) + 1
+                if user.failed_logins >= 5:
+                    user.lockout_until = datetime.utcnow() + timedelta(minutes=30)
+                    flash('Account locked due to too many failed attempts. Try again in 30 minutes.', 'danger')
+                else:
+                    flash(f'Login failed. {5 - user.failed_logins} attempts remaining.', 'danger')
+                db.session.commit()
+            else:
+                flash('Login failed', 'danger')
 
     return render_template('login.html', title='Login', form=form)
+
+
+@main.route("/verify_mfa", methods=['GET', 'POST'])
+def verify_mfa():
+    from forms import MFAVerifyForm
+    user_id = session.get('mfa_user_id')
+    if not user_id:
+        return redirect(url_for('main.login'))
+
+    user = User.query.get(user_id)
+    if not user:
+        return redirect(url_for('main.login'))
+
+    form = MFAVerifyForm()
+    if form.validate_on_submit():
+        totp = pyotp.TOTP(user.mfa_secret)
+        if totp.verify(form.token.data):
+            login_user(user)
+            session.pop('mfa_user_id', None)
+            flash('Login successful', 'success')
+            return redirect(url_for('main.home'))
+        else:
+            flash('Invalid 6-digit token.', 'danger')
+
+    return render_template('verify_mfa.html', title='Verify MFA', form=form)
+
+@main.route("/settings/mfa/setup", methods=['GET', 'POST'])
+@login_required
+def setup_mfa():
+    from forms import MFAVerifyForm
+    if current_user.mfa_enabled:
+        flash('MFA is already enabled.', 'info')
+        return redirect(url_for('main.settings'))
+        
+    if 'mfa_temp_secret' not in session:
+        session['mfa_temp_secret'] = pyotp.random_base32()
+        
+    secret = session['mfa_temp_secret']
+    totp = pyotp.TOTP(secret)
+    provisioning_uri = totp.provisioning_uri(name=current_user.email, issuer_name="SmartRealEstate")
+    
+    # Generate QR Code
+    qr = qrcode.make(provisioning_uri)
+    buf = io.BytesIO()
+    qr.save(buf, format="PNG")
+    qr_b64 = base64.b64encode(buf.getvalue()).decode('utf-8')
+    
+    form = MFAVerifyForm()
+    if form.validate_on_submit():
+        if totp.verify(form.token.data):
+            current_user.mfa_secret = secret
+            current_user.mfa_enabled = True
+            db.session.commit()
+            session.pop('mfa_temp_secret', None)
+            flash('MFA has been successfully enabled!', 'success')
+            return redirect(url_for('main.settings'))
+        else:
+            flash('Invalid 6-digit token.', 'danger')
+            
+    return render_template('setup_mfa.html', form=form, qr_b64=qr_b64, secret=secret)
+
+@main.route("/settings/mfa/disable", methods=['POST'])
+@login_required
+def disable_mfa():
+    current_user.mfa_enabled = False
+    current_user.mfa_secret = None
+    db.session.commit()
+    flash('MFA has been disabled.', 'success')
+    return redirect(url_for('main.settings'))
+
 
 @main.route("/logout")
 def logout():

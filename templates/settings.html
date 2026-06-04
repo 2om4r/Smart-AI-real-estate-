@@ -109,6 +109,26 @@
 
                                 {{ security_form.submit_security(class="btn btn-primary") }}
                             </form>
+
+                            <hr class="my-4">
+                            <h5 class="mb-3">Two-Factor Authentication (2FA)</h5>
+                            <p class="text-muted small">Add an extra layer of security to your account. Once enabled, you will be required to enter a 6-digit code from your authenticator app when logging in.</p>
+                            
+                            {% if current_user.mfa_enabled %}
+                                <div class="alert alert-success d-flex align-items-center mb-3">
+                                    <i class="bi bi-check-circle-fill me-2"></i>
+                                    <div>MFA is currently <strong>Enabled</strong>.</div>
+                                </div>
+                                <form action="{{ url_for('main.disable_mfa') }}" method="POST" onsubmit="return confirm('Are you sure you want to disable MFA? This will reduce your account security.');">
+                                    <button type="submit" class="btn btn-outline-danger">Disable MFA</button>
+                                </form>
+                            {% else %}
+                                <div class="alert alert-secondary d-flex align-items-center mb-3">
+                                    <i class="bi bi-shield-x me-2 text-muted"></i>
+                                    <div>MFA is currently <strong>Disabled</strong>.</div>
+                                </div>
+                                <a href="{{ url_for('main.setup_mfa') }}" class="btn btn-outline-primary">Setup MFA</a>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

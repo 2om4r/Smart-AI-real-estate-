@@ -25,6 +25,15 @@ class RegistrationForm(FlaskForm):
         if user:
             raise ValidationError('That email is already registered. Please choose a different one.')
 
+    def validate_password(self, password):
+        from utils.password_policy import validate_password as check_password
+        email = getattr(self.email, 'data', None)
+        username = getattr(self.username, 'data', None)
+        is_valid, errors = check_password(password.data, email=email, full_name=username)
+        if not is_valid:
+            # Return only the first error to keep UI clean or combine them. We combine them.
+            raise ValidationError(" ".join(errors))
+
 class LoginForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired(), Email()])
     password = PasswordField('Password', validators=[DataRequired()])
@@ -106,11 +115,24 @@ class SettingsProfileForm(FlaskForm):
 
 class SettingsSecurityForm(FlaskForm):
     current_password = PasswordField('Current Password', validators=[DataRequired()])
-    new_password = PasswordField('New Password', validators=[DataRequired(), Length(min=6)])
+    new_password = PasswordField('New Password', validators=[DataRequired(), Length(min=12)])
     confirm_password = PasswordField('Confirm Password', validators=[DataRequired(), EqualTo('new_password')])
     submit_security = SubmitField('Update Password')
+
+    def validate_new_password(self, new_password):
+        from utils.password_policy import validate_password as check_password
+        from flask_login import current_user
+        
+        is_valid, errors = check_password(new_password.data, user=current_user)
+        if not is_valid:
+            raise ValidationError(" ".join(errors))
 
 class SettingsPreferencesForm(FlaskForm):
     preferred_language = SelectField('Language', choices=[('en', 'English'), ('ar', 'Arabic')])
     theme_mode = SelectField('Theme', choices=[('light', 'Light Mode'), ('dark', 'Dark Mode')])
     submit_preferences = SubmitField('Save Preferences')
+
+class MFAVerifyForm(FlaskForm):
+    token = StringField('6-Digit Token', validators=[DataRequired(), Length(min=6, max=6)])
+    submit = SubmitField('Verify')
+

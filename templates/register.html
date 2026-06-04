@@ -345,18 +345,53 @@
 <script>
 const pwInput = document.getElementById('reg-password');
 const pwBar   = document.getElementById('pw-bar');
+const emailInput = document.getElementById('email'); // wait, the email input id is usually 'email' but wtf generates it based on field name
+const usernameInput = document.getElementById('username');
+
 if (pwInput && pwBar) {
+    // Add visual feedback list container right after the bar
+    const rulesContainer = document.createElement('div');
+    rulesContainer.style.fontSize = '0.75rem';
+    rulesContainer.style.marginTop = '8px';
+    rulesContainer.style.color = 'var(--text-muted)';
+    
+    const rules = {
+        length: { regex: /.{12,}/, text: 'At least 12 characters' },
+        upper: { regex: /[A-Z]/, text: 'One uppercase letter' },
+        lower: { regex: /[a-z]/, text: 'One lowercase letter' },
+        digit: { regex: /[0-9]/, text: 'One number' },
+        special: { regex: /[^A-Za-z0-9]/, text: 'One special character' }
+    };
+    
+    Object.keys(rules).forEach(key => {
+        const div = document.createElement('div');
+        div.id = 'rule-' + key;
+        div.innerHTML = `<i class="fas fa-times-circle text-danger me-1"></i> ${rules[key].text}`;
+        rulesContainer.appendChild(div);
+    });
+    
+    pwBar.parentElement.after(rulesContainer);
+
     pwInput.addEventListener('input', function() {
         const v = this.value;
         let score = 0;
-        if (v.length >= 8)              score++;
-        if (/[A-Z]/.test(v))            score++;
-        if (/[0-9]/.test(v))            score++;
-        if (/[^A-Za-z0-9]/.test(v))     score++;
-        const pct  = [0, 25, 50, 75, 100][score];
-        const color= ['#dc3545','#ff9800','#ffc107','#4caf50'][score - 1] || '#dc3545';
-        pwBar.style.width  = pct + '%';
-        pwBar.style.background = color;
+        
+        Object.keys(rules).forEach(key => {
+            const ruleDiv = document.getElementById('rule-' + key);
+            if (rules[key].regex.test(v)) {
+                score++;
+                ruleDiv.innerHTML = `<i class="fas fa-check-circle text-success me-1"></i> ${rules[key].text}`;
+                ruleDiv.style.color = '#28a745';
+            } else {
+                ruleDiv.innerHTML = `<i class="fas fa-times-circle text-danger me-1"></i> ${rules[key].text}`;
+                ruleDiv.style.color = 'var(--text-muted)';
+            }
+        });
+
+        const pct = (score / 5) * 100;
+        const colors = ['#dc3545', '#dc3545', '#ff9800', '#ffc107', '#8bc34a', '#4caf50'];
+        pwBar.style.width = pct + '%';
+        pwBar.style.background = colors[score];
     });
 }
 </script>
