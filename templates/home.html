@@ -108,18 +108,37 @@
                         <label>Location</label>
                         <input type="text" id="pred-location" class="form-control" required>
                     </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label>Type</label>
+                            <select id="pred-type" class="form-select">
+                                <option value="Villa">Villa</option>
+                                <option value="Apartment">Apartment</option>
+                                <option value="Twin House">Twin House</option>
+                                <option value="Commercial">Commercial</option>
+                                <option value="Land">Land</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label>Size (Sqm)</label>
+                            <input type="number" id="pred-sqm" class="form-control" placeholder="e.g. 200" required>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label>Bedrooms</label>
+                            <input type="number" id="pred-bedrooms" class="form-control" placeholder="0 for Land" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label>Bathrooms</label>
+                            <input type="number" id="pred-bathrooms" class="form-control" placeholder="0 for Land" required>
+                        </div>
+                    </div>
                     <div class="mb-3">
                         <label>Current Value / Price (OMR)</label>
                         <input type="number" id="pred-price" class="form-control" required>
                     </div>
-                    <div class="mb-3">
-                        <label>Type</label>
-                        <select id="pred-type" class="form-select">
-                            <option value="Villa">Villa</option>
-                            <option value="Apartment">Apartment</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100">Predict Price</button>
+                    <button type="submit" class="btn btn-primary w-100">Predict Price & Growth</button>
                 </form>
                 <div id="prediction-result" class="mt-3"></div>
             </div>
@@ -139,13 +158,23 @@ document.getElementById('prediction-form').addEventListener('submit', function(e
     const loc = document.getElementById('pred-location').value;
     const type = document.getElementById('pred-type').value;
     const price = document.getElementById('pred-price').value;
+    const sqm = document.getElementById('pred-sqm').value;
+    const bedrooms = document.getElementById('pred-bedrooms').value;
+    const bathrooms = document.getElementById('pred-bathrooms').value;
 
     document.getElementById('prediction-result').innerHTML = '<div class="spinner-border text-primary" role="status"></div><p>Calculating investment data...</p>';
 
     fetch('/api/predict_price', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location: loc, type: type, price: parseFloat(price) })
+        body: JSON.stringify({ 
+            location: loc, 
+            type: type, 
+            price: parseFloat(price),
+            sqm: parseFloat(sqm),
+            bedrooms: parseFloat(bedrooms),
+            bathrooms: parseFloat(bathrooms)
+        })
     })
     .then(response => response.json())
     .then(data => {

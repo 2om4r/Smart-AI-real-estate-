@@ -682,7 +682,7 @@
                     <a href="{{ url_for('main.property_detail', property_id=property.id) }}"
                       class="btn btn-sm btn-outline-secondary">View</a>
                     {% if property.status != 'sold' %}
-                    <button class="btn btn-sm btn-outline-success" onclick="openSoldModal({{ property.id }}, {{ property.price }})" title="Mark as Sold">
+                    <button class="btn btn-sm btn-outline-success" onclick="openSoldModal('{{ property.id }}', '{{ property.price }}')" title="Mark as Sold">
                       <i class="fas fa-handshake"></i> Sold
                     </button>
                     {% endif %}

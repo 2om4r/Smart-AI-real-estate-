@@ -180,7 +180,7 @@
                                 </form>
                             </td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-info" title="Chat with User" onclick="openAdminChat({{ user.id }}, '{{ user.username }}')">
+                                <button type="button" class="btn btn-sm btn-info" title="Chat with User" onclick="openAdminChat('{{ user.id }}', '{{ user.username|escape }}')">
                                     <i class="fas fa-comment-dots text-white"></i>
                                 </button>
                                 {% if user.id != current_user.id %}

@@ -61,13 +61,12 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT  = Path(__file__).parent.parent
 SOURCE_DB     = Path(os.environ.get("SOURCE_DB",
-                                    str(PROJECT_ROOT / "instance" / "database" / "omanpDatabase.db")))
+                                    str(PROJECT_ROOT / "instance" / "database" / "2019-2026db.db")))
 REGISTRY_DIR  = PROJECT_ROOT / "models" / "registry"
 LATEST_LINK   = REGISTRY_DIR / "latest.pkl"
 LEGACY_PICKLE = PROJECT_ROOT / "ml_model_trained.pkl"   
 
-TABLE_NAME = "oman properties 2000"
-PRICE_COLS = [f'Price_{y}_OMR' for y in range(2019, 2027)]
+TABLE_NAME = "Oman_RealEstate_Dataset_2019-2026"
 YEARS      = list(range(2019, 2027))
 
 MIN_R2_SCORE = 0.70
@@ -115,7 +114,7 @@ def should_retrain(min_new: int = 100, min_days: int = 7,
         )
 
 def load_baseline_data() -> pd.DataFrame:
-    """Load original 2,000 properties × 8 years = 16,000 rows from omanpDatabase.db."""
+    """Load new 3500-row properties from 2019-2026db.db."""
     if not SOURCE_DB.exists():
         logger.warning(f"Baseline DB not found: {SOURCE_DB} — using empty df")
         return pd.DataFrame()
@@ -129,9 +128,9 @@ def load_baseline_data() -> pd.DataFrame:
     df['Bedrooms']  = pd.to_numeric(df['Bedrooms'],  errors='coerce').fillna(0)
     df['Bathrooms'] = pd.to_numeric(df['Bathrooms'], errors='coerce').fillna(0)
     df['Floor']     = pd.to_numeric(df['Floor'],     errors='coerce').fillna(0)
-    df['Area']      = df['Area'].fillna(df['Governorate'])
-    for col in PRICE_COLS:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+    df['Area']      = df['Wilayat'].fillna(df['Governorate'])
+    df['Year']      = pd.to_numeric(df['Year'],      errors='coerce').fillna(2026)
+    df['Price_OMR'] = pd.to_numeric(df['Price_OMR'].astype(str).str.replace(',', '', regex=False), errors='coerce').fillna(0)
     return df
 
 def load_new_properties_from_app_db() -> pd.DataFrame:
@@ -202,27 +201,26 @@ def _infer_governorate(location: str) -> str:
 def build_training_rows(df_baseline: pd.DataFrame,
                         df_new: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """
-    Combine baseline (16k rows) + new agent properties into one training set.
+    Combine baseline (3.5k rows) + new agent properties into one training set.
     Returns (X, y) ready for fit.
     """
     records = []
 
     for _, row in df_baseline.iterrows():
-        for year, col in zip(YEARS, PRICE_COLS):
-            price = float(row[col])
-            if price <= 0:
-                continue
-            records.append({
-                'type':        str(row.get('Property_Type') or 'Unknown'),
-                'governorate': str(row.get('Governorate')   or 'Unknown'),
-                'area':        str(row.get('Area')          or 'Unknown'),
-                'sqm':         float(row.get('Sqm', 0)      or 0),
-                'bedrooms':    float(row.get('Bedrooms', 0) or 0),
-                'bathrooms':   float(row.get('Bathrooms', 0)or 0),
-                'floor':       float(row.get('Floor', 0)    or 0),
-                'year':        int(year),
-                'price':       price,
-            })
+        price = float(row.get('Price_OMR', 0))
+        if price <= 0:
+            continue
+        records.append({
+            'type':        str(row.get('Property_Type') or 'Unknown'),
+            'governorate': str(row.get('Governorate')   or 'Unknown'),
+            'area':        str(row.get('Area')          or 'Unknown'),
+            'sqm':         float(row.get('Sqm', 0)      or 0),
+            'bedrooms':    float(row.get('Bedrooms', 0) or 0),
+            'bathrooms':   float(row.get('Bathrooms', 0)or 0),
+            'floor':       float(row.get('Floor', 0)    or 0),
+            'year':        int(row.get('Year', 2026)),
+            'price':       price,
+        })
 
     for _, row in df_new.iterrows():
         price = float(row.get('Price_2026_OMR', 0))

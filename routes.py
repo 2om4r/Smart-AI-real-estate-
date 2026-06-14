@@ -373,6 +373,23 @@ def api_ml_predict():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@main.route("/api/properties")
+def api_properties():
+    query = Property.query
+    if request.args.get('flagged') == '1':
+        query = query.filter_by(flagged_anomaly=True)
+    properties = query.all()
+    
+    return jsonify([{
+        'id': p.id,
+        'title': p.title,
+        'location': p.location,
+        'price': p.price,
+        'flagged_anomaly': p.flagged_anomaly,
+        'anomaly_severity': getattr(p, 'anomaly_severity', 'low'),
+        'anomaly_reason': getattr(p, 'anomaly_reason', '')
+    } for p in properties])
+
 @main.route("/api/projects")
 def api_projects():
     
@@ -1589,8 +1606,8 @@ def predict_price_api():
     except (TypeError, ValueError):
         price = 0
 
-    if price <= 0:
-        return jsonify({"error": "Valid price required"}), 400
+    if price < 100:
+        return jsonify({"error": "Please enter a realistic current value (e.g., > 1,000 OMR)."}), 400
 
     _loc_aliases = {
         'alburaimi': 'Al Buraimi', 'buraimi': 'Al Buraimi', 'al-buraimi': 'Al Buraimi',
@@ -1669,7 +1686,7 @@ def predict_price_api():
         reason = (
             f"ML-predicted {annual_rate * 100:.2f}%/yr growth from per-property "
             f"RandomForest analysis (confidence: {growth_5y['confidence']}%). "
-            f"Based on 16,000 real Omani price observations (2019-2026)."
+            f"Based on 3,500 real Omani price observations (2019-2026)."
         )
     elif method == 'ml_with_area_cagr_fallback':
         reason = (

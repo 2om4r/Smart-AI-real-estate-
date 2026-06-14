@@ -85,6 +85,9 @@ def _property_to_text(prop) -> str:
     except Exception:
         pass
 
+    surooh_tag = "المطور: شركة صروح العقارية Surooh Real Estate | " if prop.is_surooh else ""
+    omran_tag  = "المطور: مجموعة عمران OMRAN Group | " if prop.is_omran else ""
+
     return (
         f"عقار: {prop.title} | "
         f"نوع: {prop.type} | "
@@ -94,8 +97,8 @@ def _property_to_text(prop) -> str:
         f"مساحة: {size} م² | "
         f"غرف: {bedrooms} | "
         f"وكيل: {agent_name} | "
-        f"صروح: {is_surooh} | "
-        f"عمران: {is_omran} | "
+        f"{surooh_tag}"
+        f"{omran_tag}"
         f"الحالة: {status}"
         f"{parent_label}"
     )
@@ -111,19 +114,29 @@ def _area_to_text(area) -> str:
         f"السكور: {round(area.score, 1)}/100"
     )
 
-def build_knowledge_base() -> None:
+def build_knowledge_base(force: bool = False) -> None:
     
     from models import Property, Area
+
+    collection = _get_collection()
+    
+    if not force:
+        try:
+            count = collection.count()
+            if count > 0:
+                logger.info(f"[RAG] Knowledge base already has {count} documents. Skipping rebuild.")
+                return
+        except Exception:
+            pass
 
     logger.info("[RAG] Starting full knowledge-base rebuild...")
 
     try:
         _chroma.delete_collection(COLLECTION_NAME)
         logger.info("[RAG] Old collection deleted.")
+        collection = _get_collection()
     except Exception:
-        pass  
-
-    collection = _get_collection()
+        pass
 
     docs:      List[str]  = []
     doc_ids:   List[str]  = []
@@ -176,10 +189,15 @@ def build_knowledge_base() -> None:
 
     logger.info(f"[RAG] Knowledge base ready. {indexed}/{total} documents indexed.")
 
-def search_knowledge_base(query: str, k: int = 5) -> str:
+def search_knowledge_base(query: str, k: int = 15) -> str:
     
     if not query or not query.strip():
         return ""
+
+    if "صروح" in query:
+        query += " Surooh Real Estate"
+    if "عمران" in query:
+        query += " OMRAN Group"
 
     try:
         collection = _get_collection()

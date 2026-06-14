@@ -25,9 +25,9 @@ class User(db.Model, UserMixin):
     mfa_enabled = db.Column(db.Boolean, default=False)
     mfa_secret = db.Column(db.String(32), nullable=True)
 
-    properties = db.relationship('Property', backref='agent', lazy=True)
-    favorites = db.relationship('Favorite', backref='user', lazy=True)
-    inquiries = db.relationship('Inquiry', backref='user', lazy=True)
+    properties = db.relationship('Property', backref='agent', lazy=True, cascade="all, delete-orphan")
+    favorites = db.relationship('Favorite', backref='user', lazy=True, cascade="all, delete-orphan")
+    inquiries = db.relationship('Inquiry', backref='user', lazy=True, cascade="all, delete-orphan")
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password, method='pbkdf2:sha256')
@@ -253,8 +253,8 @@ class Message(db.Model):
     is_read = db.Column(db.Boolean, default=False)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
-    sender = db.relationship('User', foreign_keys=[sender_id], backref='sent_messages')
-    receiver = db.relationship('User', foreign_keys=[receiver_id], backref='received_messages')
+    sender = db.relationship('User', foreign_keys=[sender_id], backref=db.backref('sent_messages', cascade='all, delete-orphan'))
+    receiver = db.relationship('User', foreign_keys=[receiver_id], backref=db.backref('received_messages', cascade='all, delete-orphan'))
 
 class Notification(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -262,6 +262,8 @@ class Notification(db.Model):
     message = db.Column(db.String(255), nullable=False)
     is_read = db.Column(db.Boolean, default=False)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    user = db.relationship('User', backref=db.backref('notifications', cascade='all, delete-orphan'))
 
 class RecentlyViewed(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -270,6 +272,7 @@ class RecentlyViewed(db.Model):
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     property = db.relationship('Property', backref='viewed_by')
+    user = db.relationship('User', backref=db.backref('recently_viewed', cascade='all, delete-orphan'))
 
 class InvestmentRequest(db.Model):
     id       = db.Column(db.Integer, primary_key=True)
@@ -277,6 +280,8 @@ class InvestmentRequest(db.Model):
     user_id  = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
 
     agent_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    
+    agent = db.relationship('User', foreign_keys=[agent_id], backref=db.backref('investment_requests_received', cascade='all, delete-orphan'))
 
     project  = db.Column(db.String(50), nullable=True)
 

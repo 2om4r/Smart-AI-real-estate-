@@ -205,11 +205,11 @@ class MLEngine:
                 confidence = 0.0
 
             result = {
-                'price':      round(mean_pred, 2),
+                'price':      round(mean_pred, 0),
                 'confidence': round(confidence, 1),
-                'range':      [round(mean_pred - std_pred, 2),
-                               round(mean_pred + std_pred, 2)],
-                'std':        round(std_pred, 2),
+                'range':      [round(mean_pred - std_pred, 0),
+                               round(mean_pred + std_pred, 0)],
+                'std':        round(std_pred, 0),
             }
             self.cache.set(cache_key, result)
 
@@ -280,7 +280,7 @@ class MLEngine:
                 annual_rate = 0.055   
 
             method = 'ml_per_property_cagr'
-            if abs(annual_rate) < 0.005:   
+            if abs(annual_rate) < 0.005 or now_result['confidence'] < 20:   
                 try:
                     from models import Area
                     location = features.get('area') or features.get('location', '')
