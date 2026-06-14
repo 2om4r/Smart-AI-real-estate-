@@ -344,9 +344,11 @@ def _handle_agent_properties(msg: str, is_arabic: bool) -> dict | None:
     top3 = props[:3]
 
     text = (
-        f"🏘️ أفضل عقارات الوكيل **{agent.username}**:\n📞 للتواصل: {phone}"
+        f"أهلاً بك! نعم بالتأكيد، الوكيل **{agent.username}** من الوكلاء المتميزين لدينا. 🌟\n"
+        f"لقد قمت بجمع أفضل العقارات المعروضة من قبله خصيصاً لك. إذا أعجبك أي منها، يمكنك التواصل معه مباشرة عبر هذا الرقم: {phone} 📞\n\nتفضل:"
         if is_arabic else
-        f"🏘️ Top properties by agent **{agent.username}**:\n📞 Contact: {phone}"
+        f"Hello there! Yes absolutely, **{agent.username}** is one of our top agents. 🌟\n"
+        f"I've gathered the best properties currently listed by them just for you. If you like any of them, you can reach out directly via this number: {phone} 📞\n\nHere you go:"
     )
 
     result_props = []
@@ -851,7 +853,10 @@ def get_ai_response(prompt: str,
 
     invest_keywords_ar = ["استثمر مع", "أستثمر مع", "استثمار مع"]
     invest_keywords_en = ["invest with", "investment with"]
-    if (any(kw in msg_lower for kw in invest_keywords_ar + invest_keywords_en)):
+    advice_keywords = ["advice", "opinion", "think", "نصيحة", "نصيحتك", "رأيك", "هل تنصح", "what is your"]
+    
+    is_advice_query = any(kw in msg_lower for kw in advice_keywords)
+    if not is_advice_query and any(kw in msg_lower for kw in invest_keywords_ar + invest_keywords_en):
         result = _handle_invest_with_agent(prompt, user_id, is_arabic)
         if result:
             _log_chat(conversation_id, user_id, prompt,
@@ -979,6 +984,7 @@ def get_ai_response(prompt: str,
             "- property_type (Villa, Apartment, Land, Townhouse, Commercial — empty if none)\n"
             "- budget (numeric max price in OMR; 0 if not mentioned)\n"
             "- intent (search | investment | compare | contact)\n"
+            "- agent_name (Extract the agent's name if the user is asking about their properties or wants to contact them. Infer from conversation history if they say 'his properties' etc. Empty if none)\n"
             "- text (Write a rich, helpful, conversational response answering the user's question directly based on the context. If they ask for analysis, provide it here. Keep it concise but informative.)\n\n"
             "Respond ONLY with this JSON schema:\n"
             "{\n"
@@ -986,6 +992,7 @@ def get_ai_response(prompt: str,
             "  \"property_type\": \"\",\n"
             "  \"budget\": 0,\n"
             "  \"intent\": \"search\",\n"
+            "  \"agent_name\": \"\",\n"
             "  \"text\": \"\"\n"
             "}"
         ),
@@ -997,7 +1004,7 @@ def get_ai_response(prompt: str,
                       else "Searching for the best options for you... 🏘️")
     extracted_data = {
         "location": "", "property_type": "", "budget": 0,
-        "intent": "search", "text": fallback_text,
+        "intent": "search", "agent_name": "", "text": fallback_text,
     }
     tokens_used = None
 
@@ -1014,6 +1021,22 @@ def get_ai_response(prompt: str,
 
     ai_text = extracted_data.get("text", fallback_text)
     intent  = extracted_data.get("intent", "search")
+
+    agent_name_ext = extracted_data.get("agent_name", "")
+    if agent_name_ext and str(agent_name_ext).lower() not in ("none", "null", ""):
+        agent_match = _find_agent_by_name(str(agent_name_ext))
+        if agent_match:
+            mock_msg = f"properties by {agent_match.username}"
+            agent_result = _handle_agent_properties(mock_msg, is_arabic)
+            if agent_result:
+                if ai_text and ai_text != fallback_text and len(ai_text) > 20:
+                    agent_result["text"] = f"{ai_text}\n\n---\n\n{agent_result['text']}"
+                agent_result["conversation_id"] = conversation_id
+                agent_result.setdefault("investment_hotspots", [])
+                _log_chat(conversation_id, user_id, prompt,
+                          agent_result["text"], intent, language, tokens_used,
+                          round(time.time() - start_time, 3))
+                return agent_result
 
     query = Property.query
 

@@ -1014,12 +1014,11 @@ def new_property():
 
         try:
             import sys
-            import os
             scripts_dir = os.path.join(current_app.root_path, 'scripts')
             if scripts_dir not in sys.path:
                 sys.path.append(scripts_dir)
             from zone_discovery import scan_and_update_zones
-            from models import Property, Area
+
             scan_and_update_zones(db.session, Property, Area)
         except Exception as e:
             current_app.logger.error(f"Error running auto zone discovery: {e}")
