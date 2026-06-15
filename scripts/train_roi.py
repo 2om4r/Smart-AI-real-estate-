@@ -68,7 +68,7 @@ score = model_pipeline.score(X_test, y_test)
 print(f"Model R2 Score: {score:.4f}")
 
 # 6. Save Model
-output_file = PROJECT_ROOT / "roi_predictor.pkl"
+output_file = PROJECT_ROOT / "models" / "registry" / "roi_predictor.pkl"
 with open(output_file, 'wb') as f:
     pickle.dump(model_pipeline, f)
 

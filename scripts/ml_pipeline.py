@@ -57,7 +57,7 @@ SOURCE_DB     = Path(os.environ.get("SOURCE_DB",
                                     str(PROJECT_ROOT / "instance" / "database" / "2019-2026db.db")))
 REGISTRY_DIR  = PROJECT_ROOT / "models" / "registry"
 LATEST_LINK   = REGISTRY_DIR / "latest.pkl"
-LEGACY_PICKLE = PROJECT_ROOT / "ml_model_trained.pkl"   
+LEGACY_PICKLE = PROJECT_ROOT / "models" / "registry" / "ml_model_trained.pkl"   
 
 TABLE_NAME = "Oman_RealEstate_Dataset_2019-2026"
 YEARS      = list(range(2019, 2027))

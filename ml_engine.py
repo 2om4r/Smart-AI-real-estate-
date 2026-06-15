@@ -62,7 +62,7 @@ class TTLCache:
 class MLEngine:
     
     DEFAULT_MODEL_PATH = os.path.join(
-        os.path.dirname(__file__), "ml_model_trained.pkl"
+        os.path.dirname(__file__), "models", "registry", "ml_model_trained.pkl"
     )
 
     FEATURE_NAMES = [
@@ -118,7 +118,7 @@ class MLEngine:
                 f"({len(self.model.estimators_)} trees) from {path}"
             )
             
-            roi_path = os.path.join(os.path.dirname(__file__), "roi_predictor.pkl")
+            roi_path = os.path.join(os.path.dirname(__file__), "models", "registry", "roi_predictor.pkl")
             if os.path.exists(roi_path):
                 with open(roi_path, 'rb') as f:
                     self.roi_model = pickle.load(f)
