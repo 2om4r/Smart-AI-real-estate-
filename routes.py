@@ -750,9 +750,26 @@ def dashboard():
         ai_rec   = recommend_investment(prop_dicts)
         pf_stats = portfolio_summary(prop_dicts)
 
+        from ml_engine import ml
         for p in props:
-            p.predicted_price = p.price
-            p.ml_score        = 60
+            safe_price = float(p.price or 0)
+            
+            features = {
+                'type': p.type or 'Apartment',
+                'area': p.location or 'Muscat',
+                'sqm': float(p.size or 100),
+                'bedrooms': float(p.bedrooms or 2),
+                'bathrooms': float(p.bathrooms or 2),
+                'floor': 0,
+                'year': 2026
+            }
+            
+            # Predict realistic fair price using AI
+            pred_data = ml.predict_price(features)
+            p.predicted_price = pred_data.get('price', safe_price)
+            
+            # Calculate an AI investment score based on fair price vs asked price
+            p.ml_score = get_ml_investment_score(p.predicted_price, safe_price)
 
         all_agent_msgs = Message.query.filter(
             (Message.sender_id == current_user.id) |
@@ -1388,6 +1405,18 @@ def property_detail(property_id):
     if current_user.is_authenticated and current_user.role == 'customer':
         rv = RecentlyViewed(user_id=current_user.id, property_id=prop.id)
         db.session.add(rv)
+        
+        # --- Dynamic AI Heatmap Update (Real-time Demand Tracking) ---
+        # When users view properties in a specific location, the demand for that area goes up!
+        # This feeds directly into the area_ml_engine to change the Heatmap colors dynamically.
+        from models import Area
+        loc_name = prop.location or prop.city
+        if loc_name:
+            area = Area.query.filter(Area.name.ilike(f"%{loc_name}%")).first()
+            if area:
+                # Increment demand dynamically (max 100)
+                area.demand = min(100.0, area.demand + 0.1)
+                
         db.session.commit()
         
     try:
@@ -1407,22 +1436,26 @@ def property_detail(property_id):
             'type': prop.type,
             'location': prop.location or prop.city or 'Muscat',
             'status': prop.status or 'available',
-            'price_omr': float(prop.price or 0)
+            'price_omr': float(prop.price or 0),
+            'area_sqm': float(prop.size or 150)
         })
         if roi_val <= 0:
             from ai_utils import get_roi_assumption
             roi_val = get_roi_assumption(prop.type)
         
-        base_score = growth_data.get('confidence', 70) * 0.7 + min(growth_data.get('growth_pct', 10), 30)
+        ai_growth = growth_data.get('growth_pct', 0)
+        ai_future = growth_data.get('future', 0)
+        predicted_fair_price = growth_data.get('current', prop.price)
+        
+        from ml_engine import get_ml_investment_score
+        base_score = get_ml_investment_score(predicted_fair_price, prop.price)
         
         if prop.is_omran:
             base_score = min(98, base_score + 15)
         elif prop.is_surooh:
             base_score = min(95, base_score + 10)
             
-        ai_score = max(50, min(99, int(base_score)))
-        ai_growth = growth_data.get('growth_pct', 0)
-        ai_future = growth_data.get('future', 0)
+        ai_score = max(10, min(99, int(base_score)))
     except Exception as e:
         import logging
         logging.error(f"Error calculating AI score: {e}")
@@ -1675,11 +1708,25 @@ def predict_price_api():
         area_projection = projection
         gov_projection  = projection
 
-    if   "villa"      in ptype.lower(): rent_pct = 0.065
-    elif "land"       in ptype.lower(): rent_pct = 0.090
-    elif "townhouse"  in ptype.lower(): rent_pct = 0.070
-    elif "commercial" in ptype.lower(): rent_pct = 0.085
-    else:                               rent_pct = 0.075
+    roi_features = {
+        'type': ptype,
+        'location': loc or 'Muscat',
+        'price_omr': price,
+        'area_sqm': float(data.get('sqm', 100)),
+        'age_years': float(data.get('age', 5)),
+        'services_score': float(data.get('services', 50))
+    }
+    
+    predicted_roi = ml.predict_roi(roi_features)
+    rent_pct = predicted_roi / 100.0
+
+    # Fallback if AI model fails or returns 0
+    if rent_pct <= 0.0:
+        if   "villa"      in ptype.lower(): rent_pct = 0.065
+        elif "land"       in ptype.lower(): rent_pct = 0.090
+        elif "townhouse"  in ptype.lower(): rent_pct = 0.070
+        elif "commercial" in ptype.lower(): rent_pct = 0.085
+        else:                               rent_pct = 0.075
 
     if method == 'ml_per_property_cagr':
         reason = (

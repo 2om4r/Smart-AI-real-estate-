@@ -200,7 +200,14 @@ class MLEngine:
 
             if mean_pred > 0:
                 cv = std_pred / mean_pred
-                confidence = max(0.0, min(100.0, 100.0 - cv * 200.0))
+                # Balanced tuning: a 30% std dev gives ~70% confidence, 50% gives 50%
+                confidence = max(20.0, min(99.0, 100.0 - (cv * 100.0)))
+                
+                # --- Anomaly Detection Penalty ---
+                # Random Forests cannot extrapolate beyond training max values (all terminal leaves).
+                # If inputs are absurdly out of bounds, variance drops to 0 artificially. We must penalize this.
+                if feats.get('sqm', 0) > 10000 or feats.get('sqm', 0) < 20 or feats.get('bedrooms', 0) > 15 or feats.get('bathrooms', 0) > 15:
+                    confidence = min(confidence, 15.0)
             else:
                 confidence = 0.0
 
@@ -459,14 +466,29 @@ class MLEngine:
     def _guess_governorate(self, area_name: str) -> str:
         
         a = (area_name or '').lower()
-        if   'muscat'  in a or 'مسقط'  in a: return 'Muscat'
-        elif 'salalah' in a or 'صلالة' in a: return 'Dhofar'
-        elif 'sohar'   in a or 'صحار'  in a: return 'Al Batinah'
-        elif 'barka'   in a or 'بركاء' in a: return 'Al Batinah'
-        elif 'buraimi' in a or 'بريمي' in a: return 'Al Buraimi'
-        elif 'nizwa'   in a or 'نزوى'  in a: return 'Ad Dakhiliyah'
-        elif 'sur'     in a or 'صور'   in a: return 'Ash Sharqiyah'
-        elif 'duqm'    in a or 'دقم'   in a: return 'Al Wusta'
+        if any(k in a for k in ['muscat', 'مسقط', 'seeb', 'السيب', 'bousher', 'بوشر', 'amerat', 'العامرات', 'quriyat', 'قريات']):
+            return 'Muscat'
+        elif any(k in a for k in ['dhofar', 'ظفار', 'salalah', 'صلالة', 'taqah', 'طاقة', 'thumrait', 'ثمريت', 'mirbat', 'مرباط']):
+            return 'Dhofar'
+        elif any(k in a for k in ['north batinah', 'الباطنة شمال', 'sohar', 'صحار', 'shinas', 'شناص', 'liwa', 'لوى', 'saham', 'صحم', 'khaburah', 'الخابورة', 'suwaiq', 'السويق']):
+            return 'North Al Batinah'
+        elif any(k in a for k in ['south batinah', 'الباطنة جنوب', 'rustaq', 'الرستاق', 'awabi', 'العوابي', 'nakhal', 'نخل', 'barka', 'بركاء', 'mussanah', 'المصنعة']):
+            return 'South Al Batinah'
+        elif any(k in a for k in ['buraimi', 'البريمي', 'mahah', 'محضة', 'sunaynah', 'السنينة']):
+            return 'Al Buraimi'
+        elif any(k in a for k in ['dakhiliyah', 'الداخلية', 'nizwa', 'نزوى', 'bahla', 'بهلاء', 'manah', 'منح', 'hamra', 'الحمراء', 'adam', 'أدم', 'izki', 'إزكي', 'samail', 'سمائل']):
+            return 'Ad Dakhiliyah'
+        elif any(k in a for k in ['north sharqiyah', 'الشرقية شمال', 'ibra', 'إبراء', 'mudhaibi', 'المضيبي', 'bidiya', 'بدية', 'qabil', 'القابل']):
+            return 'North Ash Sharqiyah'
+        elif any(k in a for k in ['south sharqiyah', 'الشرقية جنوب', 'sur', 'صور', 'kamil', 'الكامل', 'jalan', 'جعلان', 'masirah', 'مصيرة']):
+            return 'South Ash Sharqiyah'
+        elif any(k in a for k in ['wusta', 'الوسطى', 'haima', 'هيماء', 'duqm', 'الدقم', 'دقم', 'mahout', 'محوت']):
+            return 'Al Wusta'
+        elif any(k in a for k in ['dhahirah', 'الظاهرة', 'ibri', 'عبري', 'yanqul', 'ينقل', 'dhank', 'ضنك']):
+            return 'Ad Dhahirah'
+        elif any(k in a for k in ['musandam', 'مسندم', 'khasab', 'خصب', 'dibba', 'دبا', 'bukha', 'بخا']):
+            return 'Musandam'
+            
         return 'Muscat'   
 
     def _derive_version(self, path: str) -> str:

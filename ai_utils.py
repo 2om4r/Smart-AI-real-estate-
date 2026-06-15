@@ -68,35 +68,45 @@ def get_area_stats(location_str: str):
         return None
 
 def calculate_score(p: dict, avg_price: float = 100000) -> int:
-    
-    price    = float(p.get('price', avg_price))
-    ptype    = p.get('type', 'Unknown')
-    location = p.get('location', '')
+    try:
+        from ml_engine import ml, get_ml_investment_score
+        
+        features = {
+            'type': p.get('type', 'Apartment'),
+            'area': p.get('location', 'Muscat'),
+            'sqm': float(p.get('size', 100)),
+            'bedrooms': float(p.get('bedrooms', 2)),
+            'bathrooms': float(p.get('bathrooms', 2)),
+            'floor': 0,
+            'year': 2026
+        }
+        
+        actual_price = float(p.get('price') or avg_price)
+        if actual_price <= 0:
+            actual_price = avg_price
+            
+        # 1. Predict Fair Price using the Random Forest Model
+        pred_data = ml.predict_price(features)
+        predicted_fair_price = pred_data.get('price', actual_price)
+        
+        # 2. Get AI Investment Score based on Ask Price vs Fair Price
+        base_ml_score = get_ml_investment_score(predicted_fair_price, actual_price)
+        
+        # 3. Add Area Growth context from Area Database
+        location_score = 50
+        area = get_area_stats(p.get('location', ''))
+        if area:
+            location_score = area.score
 
-    area           = None
-    location_score = 60
-    demand         = 50
-    growth         = 50
-
-    if location:
-        area = get_area_stats(location)
-    if area:
-        location_score = area.score
-        demand         = area.demand
-        growth         = area.price_growth
-
-    price_ratio = (price / avg_price) if avg_price > 0 else 1.0
-    if price_ratio < 0.8:    price_score = 90
-    elif price_ratio < 1.0:  price_score = 80
-    elif price_ratio < 1.2:  price_score = 60
-    else:                    price_score = 40
-
-    roi       = get_roi_assumption(ptype)
-    roi_score = min(roi * 10, 100)
-
-    score = (location_score * 0.3 + price_score * 0.2 +
-             roi_score * 0.2 + demand * 0.15 + growth * 0.15)
-    return min(max(int(score), 0), 100)
+        # 4. Final Blend: 75% Deal Quality (AI) + 25% Area Attractiveness (AI)
+        final_score = (base_ml_score * 0.75) + (location_score * 0.25)
+        
+        return min(max(int(final_score), 10), 99)
+        
+    except Exception as e:
+        import logging
+        logging.error(f"[AI Utils] Error in calculate_score: {e}")
+        return 60
 
 def portfolio_summary(properties: list) -> dict:
     

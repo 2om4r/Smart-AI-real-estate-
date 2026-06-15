@@ -7,15 +7,30 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 import pickle
 import os
+import sqlite3
+from pathlib import Path
 
 # 1. Load Data
-file_path = "../roi_dataset.csv"
-if not os.path.exists(file_path):
-    print(f"Error: {file_path} not found.")
+PROJECT_ROOT = Path(__file__).parent.parent
+DB_PATH = PROJECT_ROOT / "instance" / "database" / "ROI oman.db"
+
+if not DB_PATH.exists():
+    print(f"Error: Database {DB_PATH} not found.")
     exit(1)
 
-df = pd.read_csv(file_path)
+print(f"Connecting to database: {DB_PATH}")
+conn = sqlite3.connect(str(DB_PATH))
+table_name = "oman_real_estate_roi_1050"
 
+try:
+    df = pd.read_sql(f'SELECT * FROM "{table_name}"', conn)
+except Exception as e:
+    print(f"Failed to read table: {e}")
+    exit(1)
+finally:
+    conn.close()
+
+print(f"Loaded {len(df)} ROI records from database successfully.")
 
 X = df.drop(columns=['target_roi_percentage'])
 y = df['target_roi_percentage']
@@ -53,7 +68,7 @@ score = model_pipeline.score(X_test, y_test)
 print(f"Model R2 Score: {score:.4f}")
 
 # 6. Save Model
-output_file = "roi_predictor.pkl"
+output_file = PROJECT_ROOT / "roi_predictor.pkl"
 with open(output_file, 'wb') as f:
     pickle.dump(model_pipeline, f)
 

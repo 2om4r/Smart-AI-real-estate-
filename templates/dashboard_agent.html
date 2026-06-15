@@ -628,6 +628,7 @@
                 <tr>
                   <th width="50"></th>
                   <th>Price / Title</th>
+                  <th>AI Evaluation</th>
                   <th>Location</th>
                   <th>Type</th>
                   <th>Status</th>
@@ -655,6 +656,16 @@
                       style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                       {{ property.title }}
                     </div>
+                  </td>
+                  <td>
+                    {% if property.ml_score >= 80 %}
+                    <span class="badge" style="background:linear-gradient(135deg,#2e7d32,#66bb6a);"><i class="fas fa-robot me-1"></i>{{ property.ml_score }}%</span>
+                    {% elif property.ml_score >= 50 %}
+                    <span class="badge" style="background:linear-gradient(135deg,#f57f17,#fbc02d);"><i class="fas fa-robot me-1"></i>{{ property.ml_score }}%</span>
+                    {% else %}
+                    <span class="badge" style="background:linear-gradient(135deg,#c62828,#ef5350);"><i class="fas fa-robot me-1"></i>{{ property.ml_score }}%</span>
+                    {% endif %}
+                    <div class="text-muted mt-1" style="font-size:0.65rem;font-weight:bold;">Fair: OMR {{ "{:,.0f}".format(property.predicted_price) }}</div>
                   </td>
                   <td>
                     <div class="small"><i class="fas fa-map-marker-alt text-muted me-1"></i>{{ property.location }}

@@ -1,38 +1,31 @@
 """
-scripts/ml_pipeline.py — Smart Continuous Retraining Pipeline
 ==========================================================
-خطّ التَدريب الذكيّ المستمرّ للنموذج — يَجمع البيانات الأصليَّة + الجديدة
-ويُعيد التَدريب فقط عند الحاجة.
+ 🤖 Smart Continuous Retraining Pipeline (MLOps)
+==========================================================
+هذا الملف هو "محرك التعلم المستمر" للمشروع. وظيفته سحب البيانات القديمة والحديثة 
+لإعادة تدريب نموذج الذكاء الاصطناعي (Random Forest) أوتوماتيكياً.
 
-Triggers (تَلقائيَّة):
-  • Scheduled (Sunday 2am via APScheduler)
-  • Threshold: >100 new properties since last training
-  • Threshold: >7 days since last training
-  • Manual: --force flag
+📌 متى يتدرب النظام؟ (Triggers)
+  1. تلقائياً: إذا أضاف الوكلاء أكثر من 100 عقار جديد.
+  2. زمنياً: إذا مرت 7 أيام على آخر تدريب.
+  3. يدوياً: عبر تشغيل الملف مع أمر (--force).
 
-Workflow:
-  1. Check if retrain is worthwhile (skip if not enough data)
-  2. Combine: original omanpDatabase.db (16k baseline) + new properties from DB
-  3. Validate: remove outliers, drop invalid rows
-  4. Train: RandomForestRegressor (same hyperparameters as baseline)
-  5. Validate: cross-val R² must be >= 0.70 (rejection threshold)
-  6. Save: versioned pickle → models/registry/v{YYYYMMDD_HHMM}.pkl
-  7. Hot-swap: ml.hot_swap(new_path) — no restart needed
-  8. Log: TrainingHistory row + console output
-  9. Prune: keep only last 5 versions in registry
+⚙️ فهرس الدوال وأماكنها في الكود (للرجوع إليها وقت المناقشة):
+  - السطر 63  | `should_retrain`: تقرر هل نحتاج تدريب أم لا؟
+  - السطر 103 | `load_baseline_data`: جلب 3,500 عقار تاريخي من قاعدة البيانات القديمة.
+  - السطر 123 | `load_new_properties_from_app_db`: جلب العقارات الجديدة من الموقع.
+  - السطر 175 | `_infer_governorate`: دالة المحافظات (التي تغطي 11 محافظة).
+  - السطر 204 | `build_training_rows`: الخلاط (لدمج البيانات القديمة والجديدة وتجاهل الأسعار الخاطئة).
+  - السطر 255 | `_remove_outliers`: لتنظيف البيانات الإحصائية الشاذة.
+  - السطر 268 | `train_model`: دالة التدريب (بواسطة RandomForestRegressor).
+  - السطر 291 | `validate_model`: اختبار دقة النموذج (يجب أن تتجاوز 70%).
+  - السطر 308 | `save_versioned_model`: حفظ النموذج على شكل ملف .pkl.
+  - السطر 356 | `hot_swap_into_engine`: التحديث الساخن لتشغيل النموذج بالموقع بدون إيقاف السيرفر!
+  - السطر 394 | `run`: الدالة الرئيسية التي تشغل كل ما سبق بالترتيب.
 
-Usage:
-    # Auto (cron-friendly — exits if not worthwhile)
-    python scripts/ml_pipeline.py
-
-    # Force retrain regardless of thresholds
-    python scripts/ml_pipeline.py --force
-
-    # Dry-run: simulate without saving or hot-swapping
-    python scripts/ml_pipeline.py --dry-run
-
-    # Custom threshold (default: 100 new rows or 7 days)
-    python scripts/retrain.py --min-new 50 --min-days 3
+💻 أوامر التشغيل (Usage):
+  - التشغيل العادي:   python scripts/ml_pipeline.py
+  - الإجبار اليدوي:   python scripts/ml_pipeline.py --force
 """
 
 from __future__ import annotations
@@ -186,16 +179,32 @@ def load_new_properties_from_app_db() -> pd.DataFrame:
     return df
 
 def _infer_governorate(location: str) -> str:
-    """Infer governorate from location keywords."""
+    """Infer governorate from location keywords comprehensively covering Oman."""
     a = (location or '').lower()
-    if   'muscat'  in a or 'مسقط'  in a: return 'Muscat'
-    elif 'salalah' in a or 'صلالة' in a: return 'Dhofar'
-    elif 'sohar'   in a:                 return 'North Al Batinah'
-    elif 'barka'   in a:                 return 'South Al Batinah'
-    elif 'buraimi' in a:                 return 'Al Buraimi'
-    elif 'nizwa'   in a:                 return 'Ad Dakhiliyah'
-    elif 'sur'     in a:                 return 'South Ash Sharqiyah'
-    elif 'duqm'    in a:                 return 'Al Wusta'
+    
+    if any(k in a for k in ['muscat', 'مسقط', 'seeb', 'السيب', 'bousher', 'بوشر', 'amerat', 'العامرات', 'quriyat', 'قريات']):
+        return 'Muscat'
+    elif any(k in a for k in ['dhofar', 'ظفار', 'salalah', 'صلالة', 'taqah', 'طاقة', 'thumrait', 'ثمريت', 'mirbat', 'مرباط']):
+        return 'Dhofar'
+    elif any(k in a for k in ['north batinah', 'الباطنة شمال', 'sohar', 'صحار', 'shinas', 'شناص', 'liwa', 'لوى', 'saham', 'صحم', 'khaburah', 'الخابورة', 'suwaiq', 'السويق']):
+        return 'North Al Batinah'
+    elif any(k in a for k in ['south batinah', 'الباطنة جنوب', 'rustaq', 'الرستاق', 'awabi', 'العوابي', 'nakhal', 'نخل', 'barka', 'بركاء', 'mussanah', 'المصنعة']):
+        return 'South Al Batinah'
+    elif any(k in a for k in ['buraimi', 'البريمي', 'mahah', 'محضة', 'sunaynah', 'السنينة']):
+        return 'Al Buraimi'
+    elif any(k in a for k in ['dakhiliyah', 'الداخلية', 'nizwa', 'نزوى', 'bahla', 'بهلاء', 'manah', 'منح', 'hamra', 'الحمراء', 'adam', 'أدم', 'izki', 'إزكي', 'samail', 'سمائل']):
+        return 'Ad Dakhiliyah'
+    elif any(k in a for k in ['north sharqiyah', 'الشرقية شمال', 'ibra', 'إبراء', 'mudhaibi', 'المضيبي', 'bidiya', 'بدية', 'qabil', 'القابل']):
+        return 'North Ash Sharqiyah'
+    elif any(k in a for k in ['south sharqiyah', 'الشرقية جنوب', 'sur', 'صور', 'kamil', 'الكامل', 'jalan', 'جعلان', 'masirah', 'مصيرة']):
+        return 'South Ash Sharqiyah'
+    elif any(k in a for k in ['wusta', 'الوسطى', 'haima', 'هيماء', 'duqm', 'الدقم', 'دقم', 'mahout', 'محوت']):
+        return 'Al Wusta'
+    elif any(k in a for k in ['dhahirah', 'الظاهرة', 'ibri', 'عبري', 'yanqul', 'ينقل', 'dhank', 'ضنك']):
+        return 'Ad Dhahirah'
+    elif any(k in a for k in ['musandam', 'مسندم', 'khasab', 'خصب', 'dibba', 'دبا', 'bukha', 'بخا']):
+        return 'Musandam'
+        
     return 'Muscat'
 
 def build_training_rows(df_baseline: pd.DataFrame,
