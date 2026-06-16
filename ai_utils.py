@@ -72,11 +72,11 @@ def calculate_score(p: dict, avg_price: float = 100000) -> int:
         from ml_engine import ml, get_ml_investment_score
         
         features = {
-            'type': p.get('type', 'Apartment'),
-            'area': p.get('location', 'Muscat'),
-            'sqm': float(p.get('size', 100)),
-            'bedrooms': float(p.get('bedrooms', 2)),
-            'bathrooms': float(p.get('bathrooms', 2)),
+            'type': p.get('type') or 'Apartment',
+            'area': p.get('location') or 'Muscat',
+            'sqm': float(p.get('size') or 100),
+            'bedrooms': float(p.get('bedrooms') or 2),
+            'bathrooms': float(p.get('bathrooms') or 2),
             'floor': 0,
             'year': 2026
         }
