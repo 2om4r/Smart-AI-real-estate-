@@ -744,7 +744,9 @@ def dashboard():
 
         prop_dicts = [{
             'title': p.title, 'type': p.type,
-            'price': p.price, 'location': p.location
+            'price': p.price, 'location': p.location,
+            'size': p.size, 'bedrooms': p.bedrooms,
+            'bathrooms': p.bathrooms
         } for p in props]
 
         ai_rec   = recommend_investment(prop_dicts)
