@@ -72,8 +72,8 @@ def create_app(config_class=Config):
             else:
                 _ml_logger.warning("[ML] Engine load failed. Triggering automatic fallback training...")
                 try:
-                    from scripts.train_from_db import train_models
-                    train_models()
+                    from scripts.ml_pipeline import run as train_models
+                    train_models(force=True, trigger='auto_fallback')
                     
                     if init_ml_engine():
                         _ml_logger.info("[ML] Auto-training successful! Engine is now ready.")
