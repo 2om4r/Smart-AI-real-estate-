@@ -401,7 +401,7 @@ def api_projects():
         units_count = Property.query.filter_by(parent_project_id=p.id).count()
 
         try:
-            from ml_model import get_future_multiplier
+            from ml_engine import get_future_multiplier
             mult_5y = get_future_multiplier(p.location, 5)
             growth_pct = round((mult_5y - 1) * 100, 1)
         except Exception:
