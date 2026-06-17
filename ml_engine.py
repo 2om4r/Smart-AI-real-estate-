@@ -13,6 +13,10 @@ from typing import Optional, Any
 
 import numpy as np
 import pandas as pd
+import warnings
+
+# Suppress harmless scikit-learn feature name warnings
+warnings.filterwarnings('ignore', message='X does not have valid feature names')
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,10 @@ import joblib
 import logging
 import numpy as np
 from pathlib import Path
+import warnings
 
+# Suppress harmless scikit-learn feature name warnings
+warnings.filterwarnings('ignore', message='X does not have valid feature names')
 logger = logging.getLogger(__name__)
 
 class AreaMLEngine:
